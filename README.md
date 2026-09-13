@@ -59,9 +59,13 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
 
 ## Roadmap
 
-- [x] Repo scaffold (this commit): monorepo, shared types, extension
-      detection heuristic + floating button + side panel shell, Next.js app.
-- [ ] Backend: Clerk auth, Neon schema + Drizzle, profile CRUD.
+- [x] Repo scaffold: monorepo, shared types, extension detection heuristic +
+      floating button + side panel shell, Next.js app.
+- [x] Backend provisioned on Vercel: Clerk (auth), Neon (`DATABASE_URL`,
+      schema pushed via Drizzle — `users`/`profiles`/`resumes`/`applications`/
+      `field_mappings`), Vercel Blob (private store, resume files). Sign-in/
+      sign-up pages and `/dashboard` verified working end-to-end.
+- [ ] Profile CRUD API + dashboard editor.
 - [ ] Resume upload → AI parse into structured `Profile`/`Resume` JSON.
 - [ ] Extension ↔ backend auth wiring (`@clerk/chrome-extension`).
 - [ ] Autofill engine v1 (heuristic + known adapters for Greenhouse/Lever).
@@ -74,10 +78,13 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
 ```bash
 npm install
 
-# Backend (http://localhost:3000)
+# Backend (http://localhost:3000) — apps/web/.env.local already has
+# Clerk/Neon/Blob credentials pulled from Vercel (vercel env pull to refresh)
 npm run dev:web
 
 # Extension — then load apps/extension/dist as an unpacked extension
 # in chrome://extensions (Developer mode on)
 npm run dev:extension
 ```
+
+Schema changes: edit `apps/web/src/db/schema.ts`, then `npm run db:push --workspace=apps/web`.
