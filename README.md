@@ -69,7 +69,13 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
       full dashboard editor (basics, links, work authorization, experience
       with bullets, education, skills). Verified end-to-end in a real
       browser: sign-up → dashboard → edit → save → reload → persisted.
-- [ ] Resume upload → AI parse into structured `Profile`/`Resume` JSON.
+- [x] Resume upload → AI parse into structured `Profile`/`Resume` JSON:
+      `POST /api/resume` extracts text (`pdf-parse`/`mammoth`), stores the
+      original in Blob, structures it via Gemini (`generateObject`,
+      `src/lib/resume-parse.ts`) into the shared `ResumeContent` shape.
+      Dashboard lets you upload and offers to prefill the profile editor
+      from the result. **Needs a `GOOGLE_GENERATIVE_AI_API_KEY` env var to
+      actually run** — free key at aistudio.google.com/apikey.
 - [ ] Extension ↔ backend auth wiring (`@clerk/chrome-extension`).
 - [ ] Autofill engine v1 (heuristic + known adapters for Greenhouse/Lever).
 - [ ] Resume tailoring pipeline: JD → AI rewrite → PDF (`@react-pdf/renderer`) → Blob.

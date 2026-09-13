@@ -1,16 +1,27 @@
-import { currentUser } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/db";
-import { profiles } from "@/db/schema";
-import { ProfileEditor } from "./ProfileEditor";
+import { profiles, resumes } from "@/db/schema";
+import { DashboardClient } from "./DashboardClient";
 
 export default async function DashboardPage() {
+  // Resource-level check, not just the proxy.ts matcher — Clerk's own
+  // guidance (createRouteMatcher deprecation notice) is that middleware
+  // path-matching can diverge from actual routing, so every protected
+  // resource should also protect itself.
+  const { isAuthenticated } = await auth();
+  if (!isAuthenticated) redirect("/sign-in?redirect_url=/dashboard");
+
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
 
   const db = getDb();
   const [profile] = user
     ? await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1)
+    : [];
+  const resumeRows = user
+    ? await db.select().from(resumes).where(eq(resumes.userId, user.id)).orderBy(desc(resumes.createdAt))
     : [];
 
   return (
@@ -19,7 +30,7 @@ export default async function DashboardPage() {
       <p className="opacity-70 text-sm mb-8">
         This is what the extension autofills from, and what tailored resumes are built out of.
       </p>
-      <ProfileEditor
+      <DashboardClient
         initialProfile={
           profile
             ? {
@@ -37,6 +48,12 @@ export default async function DashboardPage() {
               }
             : null
         }
+        initialResumes={resumeRows.map((r) => ({
+          id: r.id,
+          fileName: r.fileName,
+          createdAt: r.createdAt.toISOString(),
+          content: r.content,
+        }))}
         defaultEmail={email}
         defaultName={user?.fullName ?? ""}
       />

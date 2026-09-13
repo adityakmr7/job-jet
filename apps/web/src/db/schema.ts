@@ -15,6 +15,7 @@ import type {
   Education,
   WorkExperience,
   Skill,
+  ResumeContent,
 } from "@job-jet/shared";
 
 // Mirrors the Clerk user — kept minimal; Clerk remains the source of truth
@@ -58,7 +59,7 @@ export const resumes = pgTable("resumes", {
   kind: resumeKindEnum("kind").notNull(),
   fileName: text("file_name").notNull(),
   blobUrl: text("blob_url").notNull(),
-  content: jsonb("content").notNull(), // ResumeSchema['content'] shape
+  content: jsonb("content").$type<ResumeContent>().notNull(),
   tailoredFor: jsonb("tailored_for").$type<{
     jobTitle?: string;
     company?: string;
