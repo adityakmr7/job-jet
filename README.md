@@ -65,7 +65,10 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
       schema pushed via Drizzle — `users`/`profiles`/`resumes`/`applications`/
       `field_mappings`), Vercel Blob (private store, resume files). Sign-in/
       sign-up pages and `/dashboard` verified working end-to-end.
-- [ ] Profile CRUD API + dashboard editor.
+- [x] Profile CRUD: `GET`/`PUT /api/profile` (lazy user upsert, zod-validated),
+      full dashboard editor (basics, links, work authorization, experience
+      with bullets, education, skills). Verified end-to-end in a real
+      browser: sign-up → dashboard → edit → save → reload → persisted.
 - [ ] Resume upload → AI parse into structured `Profile`/`Resume` JSON.
 - [ ] Extension ↔ backend auth wiring (`@clerk/chrome-extension`).
 - [ ] Autofill engine v1 (heuristic + known adapters for Greenhouse/Lever).
