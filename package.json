@@ -1,0 +1,14 @@
+{
+  "name": "job-jet",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:extension": "npm run dev --workspace=apps/extension",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:extension": "npm run build --workspace=apps/extension"
+  }
+}

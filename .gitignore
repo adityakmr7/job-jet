@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+.env
+.env.local
+.env*.local
+.vercel/
+.turbo/
+*.log
+.DS_Store
+apps/extension/.output/
