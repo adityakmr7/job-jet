@@ -14,5 +14,11 @@ export function getModel() {
     );
   }
   const google = createGoogle({ apiKey });
-  return google("gemini-flash-latest");
+  // Deliberately not "gemini-flash-latest" (aliases can point at an
+  // overloaded model) or "gemini-3.6-flash" (tried first — a heavy
+  // "thinking" model that took ~29s for one resume and leaked stray
+  // internal self-check narration like "Cheating check. Accent check."
+  // straight into a structured output field during real testing).
+  // gemini-2.5-flash is fast, stable, and clean for structured extraction.
+  return google("gemini-2.5-flash");
 }

@@ -79,8 +79,18 @@ sites but is not implemented yet.
       original in Blob, structures it via Gemini (`generateObject`,
       `src/lib/resume-parse.ts`) into the shared `ResumeContent` shape.
       Dashboard lets you upload and offers to prefill the profile editor
-      from the result. **Needs a `GOOGLE_GENERATIVE_AI_API_KEY` env var to
-      actually run** — free key at aistudio.google.com/apikey.
+      from the result. **Verified end-to-end with a real Gemini key and a
+      real PDF** — every field (name, contact info, both links, both jobs
+      with all bullets, education) came back correct. Two real bugs found
+      and fixed along the way:
+      - `pdf-parse` (via `pdfjs-dist`) broke under Next's server bundling
+        ("Setting up fake worker failed") — fixed via `serverExternalPackages`
+        in `next.config.ts`.
+      - The model choice mattered a lot: `gemini-flash-latest` was
+        overloaded (503), `gemini-3.6-flash` worked but took ~29s and
+        leaked stray internal self-check narration into the `summary`
+        field ("Cheating check. Accent check..."). Switched to
+        `gemini-2.5-flash` — ~1s, clean output. See `src/lib/ai.ts`.
 - [x] Extension ↔ backend auth wiring: `@clerk/chrome-extension`'s
       `ClerkProvider` in the side panel, `syncHost` pointed at the web app
       with `__experimental_syncHostListener` (live session sync instead of
