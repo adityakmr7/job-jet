@@ -161,11 +161,19 @@ export function detectJobApplication(): DetectionResult {
     signals.push(`text-input-count:${textInputCount}`);
   }
 
-  // Normalize to a rough 0-1 confidence. Threshold tuned conservatively —
-  // false positives (button shows on a non-application page) are cheap and
-  // low-annoyance; false negatives (never showing up) defeat the product.
+  // Normalize to a rough 0-1 confidence.
   const confidence = Math.min(score / 8, 1);
-  const isJobApplication = confidence >= 0.4;
+
+  // Page-text keywords alone can cross the threshold on a page that just
+  // *talks about* job applications (a careers-product marketing page
+  // mentioning "resume", "job description", "work authorization" reads
+  // almost identically to a real one by text alone) — caught by dogfooding
+  // this on Job Jet's own landing page, which has zero real form fields.
+  // Require actual form-field evidence too: text signals alone are never
+  // sufficient, only a multiplier on top of a page that has a plausible
+  // application form on it.
+  const hasFormEvidence = fieldHits > 0 || hasFileUpload || textInputCount >= 3;
+  const isJobApplication = confidence >= 0.4 && hasFormEvidence;
 
   return { isJobApplication, confidence, signals, hasFileUpload };
 }

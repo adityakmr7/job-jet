@@ -55,10 +55,9 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       sendResponse({ type: "JOB_DESCRIPTION_RESULT", payload: { text: extractJobDescription() } });
       return true;
     case "AUTOFILL_REQUEST": {
-      const results = Object.entries(message.payload.values).map(([selector, value]) =>
-        setFieldValue(selector, value)
-      );
-      sendResponse({ ok: results.every(Boolean) });
+      const entries = Object.entries(message.payload.values);
+      const filled = entries.filter(([selector, value]) => setFieldValue(selector, value)).length;
+      sendResponse({ filled, total: entries.length });
       return true;
     }
     default:

@@ -5,6 +5,11 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
+  // CORS preflight from the extension (chrome-extension://) carries no
+  // auth — let it through so the route's own OPTIONS handler can answer
+  // with the right Access-Control-* headers. The real request right after
+  // still goes through auth.protect() below.
+  if (req.method === "OPTIONS") return;
   if (isProtectedRoute(req)) {
     await auth.protect();
   }

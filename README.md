@@ -42,20 +42,25 @@ On a positive detection, a floating button is injected into a shadow DOM
 a "Generate tailored resume for this job" action (auto-extracts the JD text
 from the page).
 
-## Autofill engine (planned, not yet wired to backend)
+## Autofill engine
 
 Layered matching, cheapest first:
-1. Known-site adapter — CSS selector maps for specific ATSs.
-2. Generic heuristic — fuzzy/synonym matching on field name/id/label.
-3. LLM fallback — unmatched fields sent to the backend, mapped against the
-   user's profile schema.
-
-Results are cached per-domain (`field_mappings` table) and reused, so
-repeat visits to the same ATS get faster and don't re-hit the LLM.
+1. **Heuristic (done)** — `apps/extension/src/lib/autofill-map.ts` matches
+   detected fields against the user's saved profile purely by name/id/label
+   keyword, entirely client-side. Fetches the profile from `/api/profile`
+   cross-origin (the extension's Clerk session token as a Bearer header —
+   see `src/lib/api.ts` and the backend's `src/lib/cors.ts`). Deliberately
+   never fills voluntary EEO self-identification fields (gender, ethnicity,
+   veteran/disability status, pronouns) — those stay opt-in and manual.
+2. **Known-site adapter** (not built) — CSS selector maps for specific ATSs.
+3. **LLM fallback** (not built) — unmatched fields sent to the backend,
+   mapped against the user's profile schema, cached per-domain in the
+   `field_mappings` table so repeat visits to the same ATS don't re-hit the LLM.
 
 Known limitation: browsers restrict script-set `input[type=file].files` for
-security. The `DataTransfer` workaround handles most sites but some ATSs
-(Workday especially) actively resist it.
+security, so resume/file fields are never auto-filled — the side panel
+message says so explicitly. A `DataTransfer` workaround exists for some
+sites but is not implemented yet.
 
 ## Roadmap
 
@@ -85,43 +90,87 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
       registered in Clerk's `allowed_origins` (one-time, via the Backend
       API) before cross-origin session sync will actually work — waiting on
       the extension ID from loading it unpacked.
-- [x] Local test fixtures for the detection heuristic (see below) — verified
-      working in a real browser: floating button shows on the job
-      application fixture, stays hidden on the plain-content one.
-- [ ] Autofill engine v1 (heuristic + known adapters for Greenhouse/Lever).
+- [x] Local test fixtures for the detection heuristic (see below): a
+      single-step form, a 5-step wizard (fields only exist in the DOM for
+      the active step, URL hash changes per step — the harder/more
+      realistic SPA-wizard case), and a negative control. All three
+      verified working in a real browser.
+- [x] Autofill engine v1 (heuristic tier) — see above. Code complete,
+      type-checks, builds; **not yet live-verified** (Chrome caches a
+      loaded unpacked extension — needs a manual reload after each
+      rebuild, which can't be done from here; see "Reload needed" below).
+- [x] Original logo + brand identity (`apps/web/public/logo-mark.svg`,
+      procedurally-generated matching extension icons at every size,
+      Next.js app-icon/apple-icon conventions). Not derived from any other
+      product's actual mark.
+- [x] Original landing page (`apps/web/src/app/page.tsx`) — hero, feature
+      grid, how-it-works, CTA, using Job Jet's own copy and design.
+      **Scope note**: built with a comparable feature set to the "AI job
+      copilot" product category, not as a copy of any specific competitor's
+      branding, copy, or visual design — that would be a trademark/
+      copyright problem regardless of who's asking. Verified rendering
+      correctly (light/dark, signed-in/out states) in a real browser.
 - [ ] Resume tailoring pipeline: JD → AI rewrite → PDF (`@react-pdf/renderer`) → Blob.
 - [ ] LLM fallback field-mapping + crowdsourced cache.
-- [ ] Application tracking dashboard.
+- [ ] Application tracking dashboard (`applications` table exists in the
+      schema, unused so far).
+- [ ] Job matching / aggregation, referral networking, AI career-chat
+      copilot — these need a real job-data source or partnership Job Jet
+      doesn't have; not fabricating fake data to fill this in.
 
-## Testing the extension against a fixture page
+### Reload needed to test recent changes
+
+Two things changed since the extension was last loaded and need a manual
+reload in `chrome://extensions` (click the card's reload icon) before
+they're testable:
+- The autofill engine (Autofill button now actually fills fields).
+- A detection false-positive fix: the heuristic used to fire on Job Jet's
+  own landing page (it mentions "resume", "job description", "work
+  authorization" enough to look like an application page by text alone,
+  despite having zero real form fields) — found by dogfooding it. Text
+  keywords are no longer sufficient alone; real form-field evidence is
+  now required too.
+
+## Testing the extension against fixture pages
 
 Real ATS sites are slow and inconsistent to test against repeatedly, so
-`apps/extension/test-fixtures/` has two local pages exercising the
-detection heuristic directly:
+`apps/extension/test-fixtures/` has local pages exercising the detection
+heuristic and autofill directly:
 
 ```bash
 npm run test:fixtures   # serves http://localhost:4000
 ```
 
-- `/careers/senior-frontend-engineer/apply/` — a realistic job application
-  form (positive case) — the floating button should appear.
-- `/about/` — a plain content page (negative control) — it should not.
-
-Verified working: loading the built extension and visiting both pages in a
-real browser confirms the button shows/hides exactly as expected.
+- `/careers/senior-frontend-engineer/apply/` — a single-step job
+  application form (positive case) — the floating button should appear,
+  and Autofill should fill most text/select fields from your saved profile.
+- `/careers/product-manager/apply/` — a 5-step wizard. Fields only exist in
+  the DOM for the currently active step (not just CSS-hidden), and the URL
+  hash changes per step — the harder, more realistic case, closer to how
+  real SPA-driven ATS wizards behave. Re-open the side panel (or click
+  Autofill again) after each "Next" to fill that step's fields.
+- `/about/` — a plain content page (negative control) — the button should
+  not appear here.
 
 ## Dev
 
 ```bash
 npm install
 
-# Backend (http://localhost:3000) — apps/web/.env.local already has
-# Clerk/Neon/Blob credentials pulled from Vercel (vercel env pull to refresh)
+# Backend (http://localhost:3001 — pinned; port 3000 may already be taken
+# by something else on your machine). apps/web/.env.local already has
+# Clerk/Neon/Blob credentials pulled from Vercel (vercel env pull to refresh).
 npm run dev:web
 
 # Extension — then load apps/extension/dist as an unpacked extension
-# in chrome://extensions (Developer mode on)
+# in chrome://extensions (Developer mode on). After any rebuild, click
+# that extension's reload icon in chrome://extensions — Chrome doesn't
+# pick up on-disk changes to an already-loaded unpacked extension on its own.
 npm run dev:extension
 ```
+
+If you change `apps/extension/.env.development`'s `VITE_CLERK_SYNC_HOST`
+away from `http://localhost:3001`, keep it matched to whatever port
+`npm run dev:web` actually binds to (it prints the real port on startup).
 
 Schema changes: edit `apps/web/src/db/schema.ts`, then `npm run db:push --workspace=apps/web`.

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { useUser, UserButton } from "@clerk/chrome-extension";
+import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
+import { fetchProfile } from "../lib/api";
+import { mapProfileToFields } from "../lib/autofill-map";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 
@@ -22,6 +24,7 @@ function openSignIn() {
 
 export function App() {
   const { isLoaded, isSignedIn } = useUser();
+  const { getToken } = useAuth();
   const [fields, setFields] = useState<DetectedField[]>([]);
   const [jobDescription, setJobDescription] = useState("");
   const [status, setStatus] = useState<string>("");
@@ -44,13 +47,37 @@ export function App() {
   async function handleAutofill() {
     setStatus("Filling…");
     try {
-      // TODO(backend): replace with a real call to POST /api/autofill/map
-      // (profile + fields[] -> { selector: value }), using layered
-      // known-site-adapter -> heuristic -> LLM-fallback matching server-side.
-      await sendToContentScript({ type: "AUTOFILL_REQUEST", payload: { values: {} } });
-      setStatus("Filled what we could — please double-check before submitting.");
-    } catch {
-      setStatus("Autofill failed on this page.");
+      const profile = await fetchProfile(getToken);
+      if (!profile) {
+        setStatus("No saved profile yet — add one in the Job Jet dashboard first.");
+        return;
+      }
+
+      // Fresh scan rather than the fields loaded on panel-open: on a
+      // multi-step form the fields on screen may have changed since then.
+      const res = await sendToContentScript<{ payload: { fields: DetectedField[] } }>({
+        type: "REQUEST_FORM_FIELDS",
+      });
+      const currentFields = res.payload.fields;
+      setFields(currentFields);
+
+      const mapped = mapProfileToFields(currentFields, profile);
+      if (mapped.length === 0) {
+        setStatus("Didn't recognize any fields we could fill on this page.");
+        return;
+      }
+
+      const values = Object.fromEntries(mapped.map((m) => [m.selector, m.value]));
+      const result = await sendToContentScript<{ filled: number; total: number }>({
+        type: "AUTOFILL_REQUEST",
+        payload: { values },
+      });
+      setStatus(
+        `Filled ${result.filled} of ${result.total} fields — some fields (file uploads, ` +
+          `demographic questions, open-ended questions) need your input. Double-check before submitting.`
+      );
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Autofill failed on this page.");
     }
   }
 

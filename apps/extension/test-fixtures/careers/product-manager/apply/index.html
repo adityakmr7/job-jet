@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Apply for Product Manager — Acme Corp Careers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 640px; margin: 0 auto; padding: 32px 20px 120px; color: #1a1a1a; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .meta { color: #666; margin-bottom: 24px; }
+  .intro { margin-bottom: 28px; line-height: 1.5; }
+
+  .progress { display: flex; gap: 6px; margin-bottom: 8px; }
+  .progress .seg { flex: 1; height: 4px; border-radius: 2px; background: #e5e5e5; }
+  .progress .seg.done { background: #6d28d9; }
+  .step-label { font-size: 12px; color: #6d28d9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 24px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  textarea { min-height: 90px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  fieldset { border: 1px solid #ddd; border-radius: 6px; margin: 14px 0; padding: 10px 14px; }
+  legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+
+  .nav { display: flex; justify-content: space-between; margin-top: 28px; }
+  button { padding: 11px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; border: none; }
+  button.next, button.submit { background: #111; color: white; }
+  button.back { background: transparent; border: 1px solid #ccc; color: #333; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .summary dt { font-size: 12px; color: #666; margin-top: 10px; }
+  .summary dd { margin: 0; font-size: 14px; }
+  #result { margin-top: 16px; padding: 12px; background: #ecfdf5; border-radius: 6px; display: none; }
+</style>
+</head>
+<body>
+  <h1>Product Manager</h1>
+  <p class="meta">Acme Corp &middot; Hybrid — Austin, TX &middot; Full-time</p>
+  <p class="intro">
+    We're an equal opportunity employer looking for a Product Manager with
+    4+ years of experience. Ready to apply now? This application has a few
+    short steps — attach your resume and answer a handful of questions
+    along the way.
+  </p>
+
+  <div class="progress" id="progress"></div>
+  <div class="step-label" id="step-label"></div>
+
+  <form id="wizard">
+    <div id="step-container"></div>
+    <div class="nav">
+      <button type="button" class="back" id="back-btn">Back</button>
+      <button type="button" class="next" id="next-btn">Next</button>
+    </div>
+  </form>
+  <div id="result">✓ This is a test fixture — nothing was actually submitted.</div>
+
+<script>
+(function () {
+  var STEPS = [
+    { id: 'personal', title: 'Personal Information' },
+    { id: 'resume', title: 'Resume & Links' },
+    { id: 'experience', title: 'Experience & Education' },
+    { id: 'questions', title: 'Screening Questions' },
+    { id: 'review', title: 'Review & Submit' },
+  ];
+
+  // Fields only exist in the DOM for the currently active step — this is
+  // the realistic/harder case (mirrors SPA-driven ATS wizards) and is
+  // deliberately NOT the "hide with CSS but keep in DOM" shortcut.
+  var data = {};
+
+  function fieldHtml(step) {
+    switch (step) {
+      case 'personal':
+        return (
+          '<div class="row">' +
+            '<div><label for="firstName">First Name</label><input id="firstName" name="firstName" type="text" /></div>' +
+            '<div><label for="lastName">Last Name</label><input id="lastName" name="lastName" type="text" /></div>' +
+          '</div>' +
+          '<label for="email">Email Address</label><input id="email" name="email" type="email" />' +
+          '<label for="phone">Phone Number</label><input id="phone" name="phone" type="tel" />' +
+          '<label for="location">Current Location</label><input id="location" name="location" type="text" placeholder="City, State" />'
+        );
+      case 'resume':
+        return (
+          '<label for="resume">Resume / CV</label><input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" />' +
+          '<label for="coverLetter">Cover Letter</label><textarea id="coverLetter" name="coverLetter"></textarea>' +
+          '<label for="linkedin">LinkedIn Profile URL</label><input id="linkedin" name="linkedin" type="url" />' +
+          '<label for="portfolio">Portfolio / Website</label><input id="portfolio" name="portfolio" type="url" />'
+        );
+      case 'experience':
+        return (
+          '<label for="currentEmployer">Current / Most Recent Employer</label><input id="currentEmployer" name="currentEmployer" type="text" />' +
+          '<label for="currentTitle">Current / Most Recent Title</label><input id="currentTitle" name="currentTitle" type="text" />' +
+          '<label for="yearsExperience">Years of Experience</label><input id="yearsExperience" name="yearsExperience" type="text" />' +
+          '<label for="school">School</label><input id="school" name="school" type="text" />' +
+          '<label for="degree">Degree</label><input id="degree" name="degree" type="text" />'
+        );
+      case 'questions':
+        return (
+          '<label for="workAuthorization">Are you legally authorized to work in the US?</label>' +
+          '<select id="workAuthorization" name="workAuthorization"><option value="">Select...</option><option>Yes</option><option>No</option></select>' +
+          '<label for="sponsorship">Will you now or in the future require visa sponsorship?</label>' +
+          '<select id="sponsorship" name="sponsorship"><option value="">Select...</option><option>Yes</option><option>No</option></select>' +
+          '<div class="row">' +
+            '<div><label for="desiredSalary">Desired Salary</label><input id="desiredSalary" name="desiredSalary" type="text" /></div>' +
+            '<div><label for="noticePeriod">Notice Period</label><input id="noticePeriod" name="noticePeriod" type="text" /></div>' +
+          '</div>' +
+          '<label for="howDidYouHear">How did you hear about us?</label>' +
+          '<select id="howDidYouHear" name="howDidYouHear"><option value="">Select...</option><option>Job board</option><option>Referral</option><option>Other</option></select>' +
+          '<fieldset><legend>Voluntary self-identification (optional)</legend>' +
+            '<label for="pronouns">Pronouns</label><select id="pronouns" name="pronouns"><option value="">Prefer not to say</option><option>She/her</option><option>He/him</option><option>They/them</option></select>' +
+            '<label for="veteranStatus">Veteran Status</label><select id="veteranStatus" name="veteranStatus"><option value="">Prefer not to say</option><option>I am a veteran</option><option>I am not a veteran</option></select>' +
+            '<label for="disabilityStatus">Disability Status</label><select id="disabilityStatus" name="disabilityStatus"><option value="">Prefer not to say</option><option>Yes</option><option>No</option></select>' +
+          '</fieldset>'
+        );
+      case 'review':
+        var dl = '<dl class="summary">';
+        ['firstName','lastName','email','phone','location','linkedin','portfolio','currentEmployer','currentTitle','yearsExperience','school','degree','workAuthorization','sponsorship','desiredSalary','noticePeriod'].forEach(function (key) {
+          if (data[key]) dl += '<dt>' + key + '</dt><dd>' + data[key] + '</dd>';
+        });
+        dl += '</dl>';
+        return dl || '<p>Nothing entered yet — go back and fill out the form.</p>';
+    }
+  }
+
+  var current = 0;
+
+  function saveCurrentStepValues() {
+    var container = document.getElementById('step-container');
+    container.querySelectorAll('input, select, textarea').forEach(function (el) {
+      if (el.type === 'file') return;
+      data[el.name] = el.value;
+    });
+  }
+
+  function render() {
+    var progress = document.getElementById('progress');
+    progress.innerHTML = STEPS.map(function (s, i) {
+      return '<div class="seg' + (i <= current ? ' done' : '') + '"></div>';
+    }).join('');
+    document.getElementById('step-label').textContent =
+      'Step ' + (current + 1) + ' of ' + STEPS.length + ': ' + STEPS[current].title;
+
+    var container = document.getElementById('step-container');
+    container.innerHTML = fieldHtml(STEPS[current].id);
+    // Restore any previously entered values for this step.
+    container.querySelectorAll('input, select, textarea').forEach(function (el) {
+      if (data[el.name] != null) el.value = data[el.name];
+    });
+
+    document.getElementById('back-btn').disabled = current === 0;
+    var nextBtn = document.getElementById('next-btn');
+    if (current === STEPS.length - 1) {
+      nextBtn.textContent = 'Submit Application';
+      nextBtn.className = 'submit';
+    } else {
+      nextBtn.textContent = 'Next';
+      nextBtn.className = 'next';
+    }
+
+    history.pushState(null, '', '#' + STEPS[current].id);
+  }
+
+  document.getElementById('back-btn').addEventListener('click', function () {
+    saveCurrentStepValues();
+    if (current > 0) { current--; render(); }
+  });
+
+  document.getElementById('next-btn').addEventListener('click', function () {
+    saveCurrentStepValues();
+    if (current < STEPS.length - 1) {
+      current++;
+      render();
+    } else {
+      document.getElementById('wizard').style.display = 'none';
+      document.getElementById('result').style.display = 'block';
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

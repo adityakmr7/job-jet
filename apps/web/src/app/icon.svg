@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="jobjet-bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed" />
+      <stop offset="1" stop-color="#5b21b6" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#jobjet-bg)" />
+  <path d="M34 72 L54 92 L98 28" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="102.5" y1="21.4" x2="108.2" y2="13.1" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.55" />
+  <line x1="107.1" y1="15.3" x2="111.6" y2="8.7" stroke="white" stroke-width="5" stroke-linecap="round" opacity="0.3" />
+</svg>
