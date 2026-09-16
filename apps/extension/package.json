@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:fixtures": "node test-fixtures/serve.mjs"
   },
   "dependencies": {
+    "@clerk/chrome-extension": "^3.1.82",
     "@job-jet/shared": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

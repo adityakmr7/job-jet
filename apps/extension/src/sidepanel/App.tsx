@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
+import { useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
 
-// TODO(auth): replace with @clerk/chrome-extension session state once the
-// backend/auth phase lands. This stub is what unblocks UI work in parallel.
-function useAuth() {
-  return { isSignedIn: false, signIn: () => window.open("https://job-jet.app/sign-in", "_blank") };
-}
+const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 
 async function getActiveTabId(): Promise<number | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -19,8 +16,12 @@ async function sendToContentScript<T = unknown>(message: ExtensionMessage): Prom
   return chrome.tabs.sendMessage(tabId, message);
 }
 
+function openSignIn() {
+  chrome.tabs.create({ url: `${SYNC_HOST}/sign-in` });
+}
+
 export function App() {
-  const { isSignedIn, signIn } = useAuth();
+  const { isLoaded, isSignedIn } = useUser();
   const [fields, setFields] = useState<DetectedField[]>([]);
   const [jobDescription, setJobDescription] = useState("");
   const [status, setStatus] = useState<string>("");
@@ -61,21 +62,33 @@ export function App() {
     setStatus("Resume generation isn't wired up yet — backend phase next.");
   }
 
+  if (!isLoaded) {
+    return (
+      <div className="section">
+        <p className="hint">Loading…</p>
+      </div>
+    );
+  }
+
   if (!isSignedIn) {
     return (
       <div className="section">
         <h1>Job Jet</h1>
         <p>Sign in to autofill applications and generate tailored resumes.</p>
-        <button className="primary" onClick={signIn}>
+        <button className="primary" onClick={openSignIn}>
           Sign in
         </button>
+        <p className="hint">Opens job-jet in a new tab — come back here once you're signed in.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h1>Job Jet</h1>
+      <div className="section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h1 style={{ margin: 0 }}>Job Jet</h1>
+        <UserButton />
+      </div>
 
       <div className="section">
         <h2>This page</h2>

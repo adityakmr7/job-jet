@@ -76,11 +76,39 @@ security. The `DataTransfer` workaround handles most sites but some ATSs
       Dashboard lets you upload and offers to prefill the profile editor
       from the result. **Needs a `GOOGLE_GENERATIVE_AI_API_KEY` env var to
       actually run** — free key at aistudio.google.com/apikey.
-- [ ] Extension ↔ backend auth wiring (`@clerk/chrome-extension`).
+- [x] Extension ↔ backend auth wiring: `@clerk/chrome-extension`'s
+      `ClerkProvider` in the side panel, `syncHost` pointed at the web app
+      with `__experimental_syncHostListener` (live session sync instead of
+      requiring the panel to be closed/reopened — a known limitation of the
+      SDK without that flag), manifest updated with the `cookies` permission
+      it needs. **Not yet fully verified**: needs the built extension's ID
+      registered in Clerk's `allowed_origins` (one-time, via the Backend
+      API) before cross-origin session sync will actually work — waiting on
+      the extension ID from loading it unpacked.
+- [x] Local test fixtures for the detection heuristic (see below) — verified
+      working in a real browser: floating button shows on the job
+      application fixture, stays hidden on the plain-content one.
 - [ ] Autofill engine v1 (heuristic + known adapters for Greenhouse/Lever).
 - [ ] Resume tailoring pipeline: JD → AI rewrite → PDF (`@react-pdf/renderer`) → Blob.
 - [ ] LLM fallback field-mapping + crowdsourced cache.
 - [ ] Application tracking dashboard.
+
+## Testing the extension against a fixture page
+
+Real ATS sites are slow and inconsistent to test against repeatedly, so
+`apps/extension/test-fixtures/` has two local pages exercising the
+detection heuristic directly:
+
+```bash
+npm run test:fixtures   # serves http://localhost:4000
+```
+
+- `/careers/senior-frontend-engineer/apply/` — a realistic job application
+  form (positive case) — the floating button should appear.
+- `/about/` — a plain content page (negative control) — it should not.
+
+Verified working: loading the built extension and visiting both pages in a
+real browser confirms the button shows/hides exactly as expected.
 
 ## Dev
 

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Apply for Senior Frontend Engineer — Acme Corp Careers</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 0 auto; padding: 32px 20px 120px; color: #1a1a1a; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .meta { color: #666; margin-bottom: 24px; }
+  section { margin-bottom: 32px; }
+  h2 { font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  textarea { min-height: 90px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  fieldset { border: 1px solid #ddd; border-radius: 6px; margin: 14px 0; padding: 10px 14px; }
+  legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+  button { margin-top: 24px; padding: 12px 28px; background: #111; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+  #result { margin-top: 16px; padding: 12px; background: #ecfdf5; border-radius: 6px; display: none; }
+</style>
+</head>
+<body>
+  <h1>Senior Frontend Engineer</h1>
+  <p class="meta">Acme Corp &middot; Remote &middot; Full-time</p>
+
+  <section>
+    <h2>Job description</h2>
+    <p>
+      Acme Corp is an equal opportunity employer. We're looking for a Senior
+      Frontend Engineer with 5+ years of experience building production web
+      applications. Ready to apply now? Fill out the application below and
+      attach your resume — we review every application personally.
+    </p>
+  </section>
+
+  <section>
+    <h2>Application</h2>
+    <form id="application-form">
+      <div class="row">
+        <div>
+          <label for="firstName">First Name</label>
+          <input id="firstName" name="firstName" type="text" placeholder="Jane" required />
+        </div>
+        <div>
+          <label for="lastName">Last Name</label>
+          <input id="lastName" name="lastName" type="text" placeholder="Doe" required />
+        </div>
+      </div>
+
+      <label for="email">Email Address</label>
+      <input id="email" name="email" type="email" placeholder="jane@example.com" required />
+
+      <label for="phone">Phone Number</label>
+      <input id="phone" name="phone" type="tel" placeholder="+1 555 123 4567" />
+
+      <label for="linkedin">LinkedIn Profile URL</label>
+      <input id="linkedin" name="linkedin" type="url" placeholder="https://linkedin.com/in/..." />
+
+      <label for="portfolio">Portfolio / Website</label>
+      <input id="portfolio" name="portfolio" type="url" placeholder="https://..." />
+
+      <label for="resume">Resume / CV</label>
+      <input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" required />
+
+      <label for="coverLetter">Cover Letter</label>
+      <textarea id="coverLetter" name="coverLetter" placeholder="Tell us why you're a fit..."></textarea>
+
+      <fieldset>
+        <legend>Work authorization</legend>
+        <label for="workAuthorization">Are you legally authorized to work in the US?</label>
+        <select id="workAuthorization" name="workAuthorization">
+          <option value="">Select...</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+
+        <label for="sponsorship">Will you now or in the future require visa sponsorship?</label>
+        <select id="sponsorship" name="sponsorship">
+          <option value="">Select...</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </fieldset>
+
+      <div class="row">
+        <div>
+          <label for="desiredSalary">Desired Salary</label>
+          <input id="desiredSalary" name="desiredSalary" type="text" placeholder="$150,000" />
+        </div>
+        <div>
+          <label for="noticePeriod">Notice Period</label>
+          <input id="noticePeriod" name="noticePeriod" type="text" placeholder="2 weeks" />
+        </div>
+      </div>
+
+      <label for="howDidYouHear">How did you hear about us?</label>
+      <select id="howDidYouHear" name="howDidYouHear">
+        <option value="">Select...</option>
+        <option>Job board</option>
+        <option>Referral</option>
+        <option>Company website</option>
+        <option>Other</option>
+      </select>
+
+      <fieldset>
+        <legend>Voluntary self-identification (optional)</legend>
+        <label for="pronouns">Pronouns</label>
+        <select id="pronouns" name="pronouns">
+          <option value="">Prefer not to say</option>
+          <option>She/her</option>
+          <option>He/him</option>
+          <option>They/them</option>
+        </select>
+
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender">
+          <option value="">Prefer not to say</option>
+          <option>Woman</option>
+          <option>Man</option>
+          <option>Non-binary</option>
+        </select>
+
+        <label for="ethnicity">Race / Ethnicity</label>
+        <select id="ethnicity" name="ethnicity">
+          <option value="">Prefer not to say</option>
+          <option>Asian</option>
+          <option>Black or African American</option>
+          <option>Hispanic or Latino</option>
+          <option>White</option>
+          <option>Two or more races</option>
+        </select>
+
+        <label for="veteranStatus">Veteran Status</label>
+        <select id="veteranStatus" name="veteranStatus">
+          <option value="">Prefer not to say</option>
+          <option>I am a veteran</option>
+          <option>I am not a veteran</option>
+        </select>
+
+        <label for="disabilityStatus">Disability Status</label>
+        <select id="disabilityStatus" name="disabilityStatus">
+          <option value="">Prefer not to say</option>
+          <option>Yes, I have a disability</option>
+          <option>No</option>
+        </select>
+      </fieldset>
+
+      <button type="submit">Submit Application</button>
+      <div id="result">✓ This is a test fixture — nothing was actually submitted.</div>
+    </form>
+  </section>
+
+  <script>
+    document.getElementById('application-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      document.getElementById('result').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

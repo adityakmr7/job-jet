@@ -9,6 +9,7 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:extension": "npm run dev --workspace=apps/extension",
     "build:web": "npm run build --workspace=apps/web",
-    "build:extension": "npm run build --workspace=apps/extension"
+    "build:extension": "npm run build --workspace=apps/extension",
+    "test:fixtures": "npm run test:fixtures --workspace=apps/extension"
   }
 }
