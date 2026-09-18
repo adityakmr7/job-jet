@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { FileText, Upload, Loader2 } from "lucide-react";
 import type { ResumeContent } from "@job-jet/shared";
 
 type ResumeSummary = {
@@ -45,11 +46,23 @@ export function ResumeUpload({
   }
 
   return (
-    <section className="flex flex-col gap-3 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase opacity-60">Resumes</h2>
-        <label className="text-sm text-violet-700 font-medium cursor-pointer">
-          {state === "uploading" ? "Uploading & parsing…" : "+ Upload resume"}
+    <section className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Resumes</h2>
+        <label
+          className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors cursor-pointer ${
+            state === "uploading" ? "text-muted pointer-events-none" : "text-accent hover:text-accent-hover"
+          }`}
+        >
+          {state === "uploading" ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading &amp; parsing…
+            </>
+          ) : (
+            <>
+              <Upload className="w-3.5 h-3.5" /> Upload resume
+            </>
+          )}
           <input
             ref={inputRef}
             type="file"
@@ -64,21 +77,33 @@ export function ResumeUpload({
         </label>
       </div>
 
-      {state === "error" && <p className="text-sm text-red-600">{error}</p>}
+      {state === "error" && <p className="text-sm text-red-500 mb-3">{error}</p>}
 
       {resumes.length === 0 ? (
-        <p className="text-sm opacity-60">
-          Upload a PDF or DOCX resume — it's parsed into structured data the extension autofills from and tailors new resumes off of.
-        </p>
+        <div className="rounded-xl border border-dashed border-border-strong p-6 text-center">
+          <FileText className="w-6 h-6 text-muted mx-auto mb-2" strokeWidth={1.5} />
+          <p className="text-sm text-muted max-w-sm mx-auto">
+            Upload a PDF or DOCX resume — it&apos;s parsed into structured data the extension autofills from
+            and tailors new resumes off of.
+          </p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {resumes.map((r) => (
-            <li key={r.id} className="border rounded-lg p-3 text-sm">
-              <div className="font-medium">{r.fileName}</div>
-              <div className="opacity-60">
-                {r.content.experience.length} role{r.content.experience.length === 1 ? "" : "s"} ·{" "}
-                {r.content.education.length} school{r.content.education.length === 1 ? "" : "s"} ·{" "}
-                {r.content.skills.length} skill{r.content.skills.length === 1 ? "" : "s"} parsed
+            <li
+              key={r.id}
+              className="flex items-center gap-3 rounded-xl border border-border bg-background p-3.5 text-sm"
+            >
+              <div className="shrink-0 w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center">
+                <FileText className="w-4 h-4 text-accent" strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium truncate">{r.fileName}</div>
+                <div className="text-muted text-xs mt-0.5">
+                  {r.content.experience.length} role{r.content.experience.length === 1 ? "" : "s"} ·{" "}
+                  {r.content.education.length} school{r.content.education.length === 1 ? "" : "s"} ·{" "}
+                  {r.content.skills.length} skill{r.content.skills.length === 1 ? "" : "s"} parsed
+                </div>
               </div>
             </li>
           ))}

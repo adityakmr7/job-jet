@@ -1,9 +1,16 @@
 import { SignUp } from "@clerk/nextjs";
+import { Logo } from "@/components/Logo";
 
 export default function Page() {
   return (
-    <div className="flex-1 flex items-center justify-center py-12">
-      <SignUp />
+    <div className="relative flex-1 flex flex-col items-center justify-center py-16 overflow-hidden">
+      <div className="absolute inset-0 bg-grid pointer-events-none" aria-hidden />
+      <div className="relative mb-8">
+        <Logo size={32} />
+      </div>
+      <div className="relative">
+        <SignUp />
+      </div>
     </div>
   );
 }

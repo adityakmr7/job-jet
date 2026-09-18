@@ -7,7 +7,7 @@ export function Logo({ size = 28 }: { size?: number }) {
           SVG icon; next/image's optimizer disallows local SVGs by default */}
       <img src="/logo-mark.svg" alt="" width={size} height={size} className="rounded-lg" />
       <span>
-        Job<span className="text-violet-600 dark:text-violet-400">Jet</span>
+        Job<span className="text-accent">Jet</span>
       </span>
     </Link>
   );

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { profiles, resumes } from "@/db/schema";
+import { DashboardShell } from "@/components/DashboardShell";
 import { DashboardClient } from "./DashboardClient";
 
 export default async function DashboardPage() {
@@ -25,11 +26,11 @@ export default async function DashboardPage() {
     : [];
 
   return (
-    <main className="flex-1 p-8">
-      <h1 className="text-2xl font-semibold mb-1">Your profile</h1>
-      <p className="opacity-70 text-sm mb-8">
-        This is what the extension autofills from, and what tailored resumes are built out of.
-      </p>
+    <DashboardShell
+      title="Your profile"
+      description="This is what the extension autofills from, and what tailored resumes are built out of."
+      email={email}
+    >
       <DashboardClient
         initialProfile={
           profile
@@ -57,6 +58,6 @@ export default async function DashboardPage() {
         defaultEmail={email}
         defaultName={user?.fullName ?? ""}
       />
-    </main>
+    </DashboardShell>
   );
 }

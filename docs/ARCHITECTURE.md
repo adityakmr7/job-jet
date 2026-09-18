@@ -236,6 +236,24 @@ by file path at runtime, which breaks under Next.js's server bundling
 
 All three verified against the built extension in a real browser.
 
+## Design system
+
+A token-based system rather than one-off Tailwind classes, defined once in
+`apps/web/src/app/globals.css` (`--background`, `--surface`, `--border`,
+`--muted`, `--accent`, plus shadow tokens) and mirrored with matching hex
+values in the extension's `sidepanel/styles.css`, so the web app and the
+extension read as one product rather than two. Light/dark both defined
+explicitly (`prefers-color-scheme`), including getting Clerk's own
+components (`<SignIn>`, `<UserButton>`, etc.) to follow the same dark mode
+— they need the CSS `color-scheme` property set on `:root`, not just a
+media query on our own tokens, to auto-adapt; missed initially, caught by
+actually toggling dark mode and looking.
+
+The dashboard is a proper app shell (`DashboardShell.tsx`): a sidebar with
+the current "Profile" section active and "Applications" / "Tailored
+resumes" shown as disabled nav items labeled "Soon" — an honest way to
+show product direction without a nav link to a page that doesn't exist yet.
+
 ## Scope boundaries, and why
 
 A few things intentionally aren't built, each for a concrete reason rather

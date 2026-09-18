@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import type { Profile, ResumeContent } from "@job-jet/shared";
 import { ProfileEditor } from "./ProfileEditor";
 import { ResumeUpload } from "./ResumeUpload";
@@ -32,7 +33,7 @@ export function DashboardClient({
   const [prefillNotice, setPrefillNotice] = useState(false);
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-6">
       <ResumeUpload
         initialResumes={initialResumes}
         onParsed={(content) => {
@@ -43,7 +44,8 @@ export function DashboardClient({
       />
 
       {prefillNotice && (
-        <p className="text-sm bg-violet-50 text-violet-800 rounded-lg px-3 py-2 max-w-2xl">
+        <p className="flex items-center gap-2 text-sm bg-accent-soft text-accent rounded-xl px-4 py-3">
+          <Sparkles className="w-4 h-4 shrink-0" />
           Your profile below was prefilled from that resume — review it and hit Save profile.
         </p>
       )}
