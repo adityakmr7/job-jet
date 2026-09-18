@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
-import { fetchProfile } from "../lib/api";
+import { fetchProfile, tailorResume, openResumeInNewTab } from "../lib/api";
 import { runAutofillMapping } from "../lib/autofill-map";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
@@ -34,6 +34,7 @@ export function App() {
   const [fields, setFields] = useState<DetectedField[]>([]);
   const [jobDescription, setJobDescription] = useState("");
   const [status, setStatus] = useState<string>("");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -89,11 +90,22 @@ export function App() {
   }
 
   async function handleGenerateResume() {
-    setStatus("Generating tailored resume…");
-    // TODO(backend): POST /api/resume/generate { jobDescription } -> returns
-    // a Blob URL for the tailored PDF; then offer download + attempt to
-    // attach it to any file input via the AUTOFILL_REQUEST file-injection path.
-    setStatus("Resume generation isn't wired up yet — backend phase next.");
+    if (!jobDescription) {
+      setStatus("Couldn't find a job description on this page to tailor a resume to.");
+      return;
+    }
+    setGenerating(true);
+    setStatus("Generating tailored resume — this can take a few seconds…");
+    try {
+      const resume = await tailorResume(getToken, jobDescription);
+      setStatus(`Opening "${resume.fileName}" in a new tab…`);
+      await openResumeInNewTab(getToken, resume.id);
+      setStatus(`Opened "${resume.fileName}" in a new tab. Attach it manually — browsers don't allow extensions to auto-fill file inputs.`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn't generate a tailored resume.");
+    } finally {
+      setGenerating(false);
+    }
   }
 
   if (!isLoaded) {
@@ -130,8 +142,8 @@ export function App() {
         <button className="primary" onClick={handleAutofill}>
           Autofill with my profile
         </button>
-        <button className="secondary" onClick={handleGenerateResume}>
-          Generate tailored resume for this job
+        <button className="secondary" onClick={handleGenerateResume} disabled={generating || !jobDescription}>
+          {generating ? "Generating…" : "Generate tailored resume for this job"}
         </button>
         {status && <p className="hint">{status}</p>}
       </div>

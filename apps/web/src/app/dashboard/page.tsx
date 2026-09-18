@@ -53,6 +53,7 @@ export default async function DashboardPage() {
           id: r.id,
           fileName: r.fileName,
           createdAt: r.createdAt.toISOString(),
+          kind: r.kind,
           content: r.content,
         }))}
         defaultEmail={email}

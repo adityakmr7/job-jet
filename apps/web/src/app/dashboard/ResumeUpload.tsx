@@ -1,13 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Upload, Loader2 } from "lucide-react";
+import { FileText, Upload, Loader2, Download, Sparkles } from "lucide-react";
 import type { ResumeContent } from "@job-jet/shared";
 
 type ResumeSummary = {
   id: string;
   fileName: string;
   createdAt: string;
+  kind: "uploaded_original" | "ai_tailored";
   content: ResumeContent;
 };
 
@@ -95,16 +96,33 @@ export function ResumeUpload({
               className="flex items-center gap-3 rounded-xl border border-border bg-background p-3.5 text-sm"
             >
               <div className="shrink-0 w-9 h-9 rounded-lg bg-accent-soft flex items-center justify-center">
-                <FileText className="w-4 h-4 text-accent" strokeWidth={2} />
+                {r.kind === "ai_tailored" ? (
+                  <Sparkles className="w-4 h-4 text-accent" strokeWidth={2} />
+                ) : (
+                  <FileText className="w-4 h-4 text-accent" strokeWidth={2} />
+                )}
               </div>
-              <div className="min-w-0">
-                <div className="font-medium truncate">{r.fileName}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium truncate">{r.fileName}</span>
+                  {r.kind === "ai_tailored" && (
+                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide rounded-full bg-accent-soft text-accent px-1.5 py-0.5">
+                      AI-tailored
+                    </span>
+                  )}
+                </div>
                 <div className="text-muted text-xs mt-0.5">
                   {r.content.experience.length} role{r.content.experience.length === 1 ? "" : "s"} ·{" "}
                   {r.content.education.length} school{r.content.education.length === 1 ? "" : "s"} ·{" "}
                   {r.content.skills.length} skill{r.content.skills.length === 1 ? "" : "s"} parsed
                 </div>
               </div>
+              <a
+                href={`/api/resume/${r.id}/download`}
+                className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" /> Download
+              </a>
             </li>
           ))}
         </ul>

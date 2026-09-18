@@ -275,15 +275,59 @@ than "haven't gotten to it":
   trademark and product design isn't something built here regardless of
   how comparable the underlying feature set is.
 
+## Resume tailoring pipeline
+
+Triggered from the extension side panel's "Generate tailored resume for
+this job" button (the JD is already in hand there — auto-extracted from
+the page). `POST /api/resume/tailor` (`src/app/api/resume/tailor/route.ts`):
+
+1. Reads the user's saved **profile** (not a re-parsed upload) — the
+   profile is the canonical, user-reviewed source, so tailoring always
+   starts from the most correct data available.
+2. `src/lib/resume-tailor.ts` calls Gemini, but is deliberately **safe by
+   construction**, not just prompted to be careful: the model is only ever
+   asked to (a) rewrite the summary, (b) reword each role's *existing*
+   bullets — same role, same bullet count in and out, so it can't add a
+   bullet's worth of fabricated achievement — and (c) reorder/select from
+   the user's *existing* skill names. It never sees a path to touch name,
+   contact info, links, employers, titles, dates, or education; those are
+   copied through from the source profile in code. The model's skill list
+   is validated against the real list afterward too — anything it invents
+   is dropped, anything it silently omits is appended back so nothing is
+   ever lost, only reordered. This matters more here than in resume
+   parsing: parsing is extractive (the model can only get facts wrong),
+   tailoring is generative (a fabricated bullet reads perfectly plausibly
+   on a resume a human then submits under their own name).
+3. `src/lib/resume-pdf.tsx` renders the result via `@react-pdf/renderer` —
+   single-column, no tables/graphics (multi-column resumes are a known way
+   to break ATS text extraction), built-in Helvetica so nothing needs
+   embedding.
+4. Stored in the private Blob store, a new `resumes` row (`kind:
+   "ai_tailored"`) with `tailoredFor: { jobTitle, company, jobDescription }`.
+
+**Downloading** needed its own route because the Blob store is private
+(`access: "private"`, set when it was provisioned) — a `blobUrl` alone
+isn't fetchable by a browser. `GET /api/resume/[id]/download` checks
+ownership, then streams the file server-side via `@vercel/blob`'s `get()`
+with `Content-Disposition: attachment`. The web dashboard uses a plain
+`<a href>` (cookie auth carries through on same-origin navigation); the
+extension can't do that (a `chrome.tabs.create` navigation wouldn't carry
+the Bearer token cross-origin), so it fetches the bytes with the same
+Bearer-token pattern as everything else, then opens them via
+`URL.createObjectURL` in a new tab.
+
+Verified end-to-end with a real Gemini call and a real generated PDF: the
+summary and skill order came back correctly tailored to a sample JD, the
+downloaded file passed a magic-byte check (`%PDF-`) with the right
+content-type and a plausible size, and the dashboard's resume list update
+was confirmed live in the browser.
+
 ## Known gaps / next up
 
 - Autofill tier 3 (LLM fallback + `field_mappings` cache) — not built.
   Known-site adapters (tier 2) built for Greenhouse and Lever; Workday,
   Ashby, iCIMS, SmartRecruiters are on the known-ATS hostname list for
   detection but don't have adapters yet.
-- Resume tailoring pipeline (job description → AI-reworded resume → PDF
-  via `@react-pdf/renderer` → Blob) — not built; `resumes.kind` already
-  has an `ai_tailored` variant reserved for it in the schema.
 - Application tracker UI — the `applications` table exists, nothing reads
   or writes it yet.
 - The extension's ID isn't yet registered in Clerk's `allowed_origins`,

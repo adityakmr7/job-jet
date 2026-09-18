@@ -12,6 +12,7 @@ type ResumeSummary = {
   id: string;
   fileName: string;
   createdAt: string;
+  kind: "uploaded_original" | "ai_tailored";
   content: ResumeContent;
 };
 

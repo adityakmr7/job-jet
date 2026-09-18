@@ -128,7 +128,14 @@ sites but is not implemented yet.
       branding, copy, or visual design — that would be a trademark/
       copyright problem regardless of who's asking. Verified rendering
       correctly (light/dark, signed-in/out states) in a real browser.
-- [ ] Resume tailoring pipeline: JD → AI rewrite → PDF (`@react-pdf/renderer`) → Blob.
+- [x] Resume tailoring pipeline: JD → AI rewrite → PDF (`@react-pdf/renderer`)
+      → Blob. Safe-by-construction against fabrication — the model can
+      only reword existing content, never touch facts (name, dates,
+      employers, etc.); see `docs/ARCHITECTURE.md`. Verified end-to-end
+      with a real Gemini call: correctly tailored summary, reordered
+      skills, valid downloaded PDF. Download works cross-origin from the
+      extension too (the Blob store is private, so this needed its own
+      authenticated streaming route, not just a public URL).
 - [ ] LLM fallback field-mapping + crowdsourced cache.
 - [ ] Application tracking dashboard (`applications` table exists in the
       schema, unused so far).
