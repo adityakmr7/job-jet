@@ -4,6 +4,9 @@ A Chrome extension that recognizes job application pages on (in principle)
 any site, and helps fill them out: autofill from a saved profile, or generate
 a resume tailored to the specific job description via AI.
 
+Full system design, data model, and the reasoning behind what's built (and
+deliberately not built) is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Structure
 
 ```
