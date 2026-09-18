@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:fixtures": "node test-fixtures/serve.mjs"
+    "test:fixtures": "node test-fixtures/serve.mjs",
+    "verify:adapters": "tsx scripts/verify-adapters.ts"
   },
   "dependencies": {
     "@clerk/chrome-extension": "^3.1.82",
@@ -21,6 +22,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.23.13",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }

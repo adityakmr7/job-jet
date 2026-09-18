@@ -3,17 +3,23 @@ import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
 import { fetchProfile } from "../lib/api";
-import { mapProfileToFields } from "../lib/autofill-map";
+import { runAutofillMapping } from "../lib/autofill-map";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 
-async function getActiveTabId(): Promise<number | undefined> {
+async function getActiveTab(): Promise<{ id?: number; hostname?: string }> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.id;
+  let hostname: string | undefined;
+  try {
+    hostname = tab?.url ? new URL(tab.url).hostname : undefined;
+  } catch {
+    hostname = undefined;
+  }
+  return { id: tab?.id, hostname };
 }
 
 async function sendToContentScript<T = unknown>(message: ExtensionMessage): Promise<T> {
-  const tabId = await getActiveTabId();
+  const { id: tabId } = await getActiveTab();
   if (tabId == null) throw new Error("No active tab");
   return chrome.tabs.sendMessage(tabId, message);
 }
@@ -55,13 +61,14 @@ export function App() {
 
       // Fresh scan rather than the fields loaded on panel-open: on a
       // multi-step form the fields on screen may have changed since then.
-      const res = await sendToContentScript<{ payload: { fields: DetectedField[] } }>({
-        type: "REQUEST_FORM_FIELDS",
-      });
+      const [res, { hostname }] = await Promise.all([
+        sendToContentScript<{ payload: { fields: DetectedField[] } }>({ type: "REQUEST_FORM_FIELDS" }),
+        getActiveTab(),
+      ]);
       const currentFields = res.payload.fields;
       setFields(currentFields);
 
-      const mapped = mapProfileToFields(currentFields, profile);
+      const mapped = runAutofillMapping(currentFields, profile, hostname ?? "");
       if (mapped.length === 0) {
         setStatus("Didn't recognize any fields we could fill on this page.");
         return;

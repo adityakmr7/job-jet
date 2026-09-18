@@ -1,4 +1,6 @@
 import type { DetectedField, Profile } from "@job-jet/shared";
+import { firstAndLastName, findLink, yesNo } from "./profile-utils";
+import { getAdapter } from "./adapters";
 
 /**
  * Heuristic tier of the (eventually layered) autofill engine: matches a
@@ -17,30 +19,13 @@ import type { DetectedField, Profile } from "@job-jet/shared";
  * notice period, "how did you hear about us").
  */
 
-function fieldText(field: DetectedField): string {
+export function fieldText(field: DetectedField): string {
   return [field.label, field.name, field.id, field.placeholder].filter(Boolean).join(" ").toLowerCase();
 }
 
-function matches(field: DetectedField, ...patterns: RegExp[]): boolean {
+export function matches(field: DetectedField, ...patterns: RegExp[]): boolean {
   const text = fieldText(field);
   return patterns.some((p) => p.test(text));
-}
-
-function firstAndLastName(fullName: string): { first: string; last: string } {
-  const parts = fullName.trim().split(/\s+/);
-  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
-}
-
-function findLink(profile: Profile, ...keywords: string[]): string | undefined {
-  const link = profile.links.find((l) =>
-    keywords.some((kw) => l.label.toLowerCase().includes(kw) || l.url.toLowerCase().includes(kw))
-  );
-  return link?.url;
-}
-
-function yesNo(value: boolean | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  return value ? "Yes" : "No";
 }
 
 /** Explicitly excluded from autofill even if a pattern would otherwise match. */
@@ -76,7 +61,10 @@ export function mapProfileToFields(
       value = profile.phone;
     } else if (matches(field, /linkedin/i)) {
       value = linkedin;
-    } else if (matches(field, /portfolio|personal.?website|github/i)) {
+    } else if (matches(field, /portfolio|personal.?website|\bwebsite\b|github/i)) {
+      // Broadened past "personal website" after real-world testing against
+      // Greenhouse: a company's custom question labeled just "Other
+      // Website" wasn't matching.
       value = portfolio;
     } else if (matches(field, /location|city|address/i)) {
       value = profile.location;
@@ -86,7 +74,10 @@ export function mapProfileToFields(
       value = yesNo(profile.workAuthorization?.requiresSponsorship);
     } else if (matches(field, /cover.?letter/i) && field.type === "textarea") {
       value = profile.summary;
-    } else if (matches(field, /current.*employer|company/i) && mostRecentJob) {
+    } else if (matches(field, /current.*(employer|company)/i) && mostRecentJob) {
+      // Grouped explicitly -- `/current.*employer|company/i` (no group)
+      // would match ANY field merely mentioning "company", unrelated to
+      // "current" at all, since | has lower precedence than concatenation.
       value = mostRecentJob.company;
     } else if (matches(field, /current.*title|job.?title/i) && mostRecentJob) {
       value = mostRecentJob.title;
@@ -102,4 +93,26 @@ export function mapProfileToFields(
   }
 
   return results;
+}
+
+/**
+ * Composes tier 2 (known-site adapter) over tier 1 (heuristic): the
+ * adapter for `hostname`, if one exists, gets first say on its core
+ * fields; the heuristic then runs only on whatever fields the adapter
+ * didn't claim, so a field is never filled twice via two different
+ * selectors pointing at the same element.
+ */
+export function runAutofillMapping(
+  fields: DetectedField[],
+  profile: Profile,
+  hostname: string
+): { selector: string; value: string }[] {
+  const adapter = getAdapter(hostname);
+  const adapterResults = adapter?.mapFields(fields, profile) ?? [];
+
+  const claimed = new Set(adapterResults.map((r) => r.selector));
+  const remainingFields = fields.filter((f) => !claimed.has(f.selector));
+  const heuristicResults = mapProfileToFields(remainingFields, profile);
+
+  return [...adapterResults, ...heuristicResults];
 }

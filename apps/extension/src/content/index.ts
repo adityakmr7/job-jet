@@ -7,6 +7,11 @@ import type { ExtensionMessage } from "../lib/messages";
 let lastUrl = location.href;
 let debounceTimer: number | undefined;
 
+// Diagnostic: lets us confirm the loaded extension's real ID against the
+// one computed from its unpacked directory path (needed to register
+// Clerk's allowed_origins for cross-origin session sync).
+console.log("[job-jet] extension id:", chrome.runtime.id);
+
 function runDetection() {
   const result = detectJobApplication();
 

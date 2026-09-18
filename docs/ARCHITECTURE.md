@@ -88,13 +88,14 @@ On a positive detection, a floating button is injected into a **shadow
 DOM** (`floating-button.ts`) so the host page's CSS can never clash with
 or override it. Clicking it opens `chrome.sidePanel`.
 
-## Autofill: three planned tiers, one built
+## Autofill: three planned tiers, two built
 
 ```
 1. Heuristic (built)        — client-side keyword matching, no network cost
                                beyond fetching the profile itself.
-2. Known-site adapter (not built) — per-ATS CSS selector maps for reliability
-                               on the platforms that matter most.
+2. Known-site adapter (built for Greenhouse + Lever) — targets each
+                               platform's documented, stable field ids/names
+                               directly instead of guessing from label text.
 3. LLM fallback (not built) — whatever tiers 1–2 miss, sent to the backend,
                                mapped against the profile schema, cached
                                per-domain in `field_mappings` so repeat
@@ -106,6 +107,35 @@ field's name/id/label against the user's profile by regex keyword —
 first/last name, email, phone, LinkedIn/portfolio links (matched from the
 profile's `links[]` by label/URL), location, work authorization,
 sponsorship, most recent job's company/title, most recent school/degree.
+
+**Tier 2** (`apps/extension/src/lib/adapters/`) — built after inspecting
+two real, live job postings (not from memory): a Greenhouse posting at
+`job-boards.greenhouse.io/figma/jobs/...` and a Lever posting at
+`jobs.lever.co/palantir/.../apply`. Both platforms use plain-English labels
+for their standard fields, so tier 1 already covers a fair amount — tier
+2's actual value is precision: it targets each platform's stable element
+`id` (Greenhouse: `first_name`, `last_name`, `email`, `phone`,
+`candidate-location`) or `name` attribute (Lever: `name`, `email`, `phone`,
+`location`, `org`, `urls[LinkedIn]`, `urls[GitHub]`, `urls[Portfolio]`)
+directly, guaranteed identical across every company hosted on that
+platform, rather than fuzzy-matching label text. `runAutofillMapping()`
+composes the two tiers: the adapter claims what it recognizes, the
+heuristic only runs on the fields left over (a field is never filled twice
+via two different selectors aimed at the same element).
+
+Deliberately **not** covered by the adapters: each platform's per-job
+custom questions (Greenhouse's `question_<id>`, Lever's
+`cards[<uuid>][fieldN]`) — their ids/names aren't stable across postings,
+and the questions themselves are often genuinely open-ended ("what's the
+hardest technical challenge you've faced"), unanswerable from a static
+profile field. That's what tier 3 (LLM fallback, using the profile + job
+description as context) is for.
+
+Verified against real captured field data from both live postings
+(`apps/extension/scripts/verify-adapters.ts`, `npm run verify:adapters`):
+correctly fills 7/11 Greenhouse fields and 8/10 Lever fields, correctly
+skipping file inputs, EEO fields, and genuinely open-ended questions in
+both cases.
 
 Two things it **deliberately never fills**, by design, not oversight:
 - **File inputs** (resume uploads) — browsers restrict scripted
@@ -229,8 +259,10 @@ than "haven't gotten to it":
 
 ## Known gaps / next up
 
-- Autofill tiers 2 (known-site adapters) and 3 (LLM fallback +
-  `field_mappings` cache) — not built.
+- Autofill tier 3 (LLM fallback + `field_mappings` cache) — not built.
+  Known-site adapters (tier 2) built for Greenhouse and Lever; Workday,
+  Ashby, iCIMS, SmartRecruiters are on the known-ATS hostname list for
+  detection but don't have adapters yet.
 - Resume tailoring pipeline (job description → AI-reworded resume → PDF
   via `@react-pdf/renderer` → Blob) — not built; `resumes.kind` already
   has an `ai_tailored` variant reserved for it in the schema.

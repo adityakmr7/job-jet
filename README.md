@@ -47,7 +47,8 @@ from the page).
 
 ## Autofill engine
 
-Layered matching, cheapest first:
+Layered matching, cheapest first — see `docs/ARCHITECTURE.md` for the full
+writeup, including what got found by inspecting two real live job postings:
 1. **Heuristic (done)** — `apps/extension/src/lib/autofill-map.ts` matches
    detected fields against the user's saved profile purely by name/id/label
    keyword, entirely client-side. Fetches the profile from `/api/profile`
@@ -55,7 +56,11 @@ Layered matching, cheapest first:
    see `src/lib/api.ts` and the backend's `src/lib/cors.ts`). Deliberately
    never fills voluntary EEO self-identification fields (gender, ethnicity,
    veteran/disability status, pronouns) — those stay opt-in and manual.
-2. **Known-site adapter** (not built) — CSS selector maps for specific ATSs.
+2. **Known-site adapter (done for Greenhouse + Lever)** —
+   `apps/extension/src/lib/adapters/` targets each platform's stable field
+   id/name directly rather than guessing from label text. Verified against
+   real captured field data from live postings on both platforms
+   (`npm run verify:adapters --workspace=apps/extension`).
 3. **LLM fallback** (not built) — unmatched fields sent to the backend,
    mapped against the user's profile schema, cached per-domain in the
    `field_mappings` table so repeat visits to the same ATS don't re-hit the LLM.
