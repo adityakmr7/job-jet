@@ -1,10 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, CircleCheck, CircleAlert } from "lucide-react";
 import type { Education, Link, Profile, Skill, WorkExperience } from "@job-jet/shared";
 
 type ProfileForm = Omit<Profile, "id" | "userId" | "updatedAt">;
+
+/**
+ * What autofill and resume tailoring actually draw on — surfaced as a
+ * live checklist so gaps are visible while editing, not just something the
+ * user has to notice by scanning empty inputs. `required` fields block
+ * Save (enforced server-side too, by the profile schema); everything else
+ * is optional but flagged since a form asking for it will otherwise go
+ * unfilled.
+ */
+function computeCompleteness(profile: ProfileForm) {
+  const checks: { label: string; required: boolean; ok: boolean }[] = [
+    { label: "Full name", required: true, ok: !!profile.fullName.trim() },
+    { label: "Email", required: true, ok: !!profile.email.trim() },
+    { label: "Phone number", required: false, ok: !!profile.phone?.trim() },
+    { label: "Location", required: false, ok: !!profile.location?.trim() },
+    { label: "A link (LinkedIn, portfolio, etc.)", required: false, ok: profile.links.length > 0 },
+    {
+      label: "Work authorization answered",
+      required: false,
+      ok: profile.workAuthorization?.authorizedToWork !== undefined,
+    },
+    { label: "At least one work experience", required: false, ok: profile.experience.length > 0 },
+    { label: "At least one school", required: false, ok: profile.education.length > 0 },
+    { label: "At least one skill", required: false, ok: profile.skills.length > 0 },
+  ];
+  const missing = checks.filter((c) => !c.ok);
+  return { missing, total: checks.length, filled: checks.length - missing.length };
+}
 
 function emptyProfile(seed: { fullName?: string; email?: string }): ProfileForm {
   return {
@@ -151,8 +179,48 @@ export function ProfileEditor({
     update("skills", profile.skills.filter((_, idx) => idx !== i));
   }
 
+  const completeness = computeCompleteness(profile);
+
   return (
     <div className="flex flex-col gap-6 pb-24">
+      {completeness.missing.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-xl bg-accent-soft text-accent px-4 py-3 text-sm font-medium">
+          <CircleCheck className="w-4 h-4 shrink-0" />
+          Profile complete — this is everything autofill and resume tailoring can draw on.
+        </div>
+      ) : (
+        <div className={card}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className={sectionLabel}>Profile completeness</h2>
+            <span className="text-xs text-muted">
+              {completeness.filled} of {completeness.total}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-surface-hover overflow-hidden mb-4">
+            <div
+              className="h-full bg-accent rounded-full transition-all"
+              style={{ width: `${(completeness.filled / completeness.total) * 100}%` }}
+            />
+          </div>
+          <ul className="flex flex-wrap gap-2">
+            {completeness.missing.map((m) => (
+              <li
+                key={m.label}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                  m.required
+                    ? "bg-red-50 text-red-600"
+                    : "bg-surface-hover text-muted"
+                }`}
+              >
+                <CircleAlert className="w-3 h-3" />
+                {m.label}
+                {m.required && " (required)"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <section className={card}>
         <h2 className={`${sectionLabel} mb-4`}>Basics</h2>
         <div className="flex flex-col gap-3">

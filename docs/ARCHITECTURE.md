@@ -221,6 +221,20 @@ by file path at runtime, which breaks under Next.js's server bundling
 `next.config.ts` — the same mechanism Next's own docs list `sharp` and
 `canvas` under for the same class of problem.
 
+### Profile completeness
+
+Parsing (or manual entry) doesn't guarantee the profile actually has what
+autofill and tailoring need — a resume with no LinkedIn link, or a user
+who's never answered the work-authorization checkboxes, just leaves those
+fields blank with nothing flagging it. `ProfileEditor.tsx` computes a live
+checklist (`computeCompleteness`) against exactly the fields the rest of
+the product reads — name/email (required, also enforced server-side by the
+schema), phone, location, a link, work authorization, and at least one
+experience/education/skill entry (each recommended, not required) — and
+renders it as a progress card at the top of the editor, or a green
+"complete" line once nothing's missing. Recalculates on every keystroke,
+not just right after a resume import.
+
 ## Testing without hitting real ATS sites
 
 `apps/extension/test-fixtures/` — a zero-dependency Node static server
