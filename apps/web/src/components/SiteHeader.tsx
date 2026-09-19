@@ -4,8 +4,8 @@ import { Logo } from "./Logo";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background/75 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
-      <div className="max-w-5xl mx-auto flex items-center justify-between px-6 py-4">
+    <header className="sticky top-4 z-10 px-4">
+      <div className="max-w-3xl mx-auto flex items-center justify-between gap-4 rounded-full border border-border bg-surface/90 backdrop-blur-md supports-[backdrop-filter]:bg-surface/70 px-5 py-2.5 shadow-[var(--shadow-card)]">
         <Logo />
         <nav className="flex items-center gap-4">
           <Show when="signed-out">

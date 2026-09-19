@@ -34,6 +34,16 @@ const KNOWN_ATS_HOSTS = [
   "personio.com",
 ];
 
+// Job Jet's own web app is never a job application, even though its
+// dashboard genuinely has real form fields and a file upload (the profile
+// editor + resume uploader) — enough "form evidence" to otherwise pass the
+// heuristic below. Found by dogfooding: the floating button was showing
+// up on our own dashboard. Matched by host (hostname:port), not just
+// hostname — localhost also serves the test fixtures (port 4000), which
+// must NOT be excluded, they're meant to be detected.
+// TODO: add the production domain (hostname only, no port) once deployed.
+const OWN_APP_HOSTS = ["localhost:3001", "127.0.0.1:3001"];
+
 const URL_KEYWORDS = ["job", "career", "apply", "position", "opening", "vacanc"];
 
 const PAGE_TEXT_KEYWORDS = [
@@ -119,6 +129,10 @@ function collectFormSignal(): { fieldHits: number; textInputCount: number; hasFi
 export function detectJobApplication(): DetectionResult {
   const hostname = location.hostname;
   const signals: string[] = [];
+
+  if (OWN_APP_HOSTS.includes(location.host)) {
+    return { isJobApplication: false, confidence: 0, signals: ["own-app-host"], hasFileUpload: false };
+  }
 
   if (hostMatches(hostname)) {
     signals.push(`known-ats:${hostname}`);

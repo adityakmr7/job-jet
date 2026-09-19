@@ -254,6 +254,22 @@ the current "Profile" section active and "Applications" / "Tailored
 resumes" shown as disabled nav items labeled "Soon" — an honest way to
 show product direction without a nav link to a page that doesn't exist yet.
 
+**Second design pass** (structural, not just color): the marketing pages'
+header is now an inset floating pill nav rather than a full-width bar, and
+the hero/final-CTA sections carry a soft blurred violet glow behind them
+for depth — both verified in a real browser in *both* themes (light
+verified via a temporary injected CSS override forcing the light token
+values, since this session's OS default is dark; nothing about that
+override is in the shipped code). Also fixed along the way, found by
+actually looking rather than assumed: Chrome's native autofill styling
+was overriding our input colors with its own grey/yellow highlight
+(`:-webkit-autofill` needs its own override, globals.css); Job Jet's own
+web app (`localhost:3001` in dev) is now explicitly excluded from the
+extension's detection — the profile/resume dashboard has enough genuine
+form-field evidence (real inputs, a real file upload) to pass the
+heuristic even after the earlier text-keyword fix, so the floating button
+was showing up on our own product.
+
 ## Scope boundaries, and why
 
 A few things intentionally aren't built, each for a concrete reason rather

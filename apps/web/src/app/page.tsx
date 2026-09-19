@@ -54,7 +54,11 @@ export default function Home() {
         {/* Hero */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-grid pointer-events-none" aria-hidden />
-          <div className="relative max-w-5xl mx-auto px-6 pt-24 pb-16 text-center">
+          <div
+            className="absolute -top-24 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] rounded-full bg-accent/20 blur-[110px] pointer-events-none"
+            aria-hidden
+          />
+          <div className="relative max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-muted shadow-[var(--shadow-card)]">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Free while in beta
@@ -152,28 +156,34 @@ export default function Home() {
         </section>
 
         {/* Final CTA */}
-        <section className="max-w-5xl mx-auto px-6 py-24 border-t border-border text-center">
-          <h2 className="text-2xl sm:text-3xl font-semibold mb-5 tracking-tight text-balance">
-            Ready to stop copy-pasting your resume?
-          </h2>
-          <Show when="signed-out">
-            <Link
-              href="/sign-up"
-              className="group inline-flex items-center gap-1.5 rounded-full bg-accent text-accent-foreground px-6 py-3 text-sm font-semibold shadow-[var(--shadow-card)] hover:bg-accent-hover hover:shadow-[var(--shadow-card-hover)] transition-all"
-            >
-              Get started free
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </Show>
-          <Show when="signed-in">
-            <Link
-              href="/dashboard"
-              className="group inline-flex items-center gap-1.5 rounded-full bg-accent text-accent-foreground px-6 py-3 text-sm font-semibold shadow-[var(--shadow-card)] hover:bg-accent-hover hover:shadow-[var(--shadow-card-hover)] transition-all"
-            >
-              Go to your dashboard
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </Show>
+        <section className="relative overflow-hidden border-t border-border">
+          <div
+            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[36rem] h-[24rem] rounded-full bg-accent/15 blur-[110px] pointer-events-none"
+            aria-hidden
+          />
+          <div className="relative max-w-5xl mx-auto px-6 py-24 text-center">
+            <h2 className="text-2xl sm:text-3xl font-semibold mb-5 tracking-tight text-balance">
+              Ready to stop copy-pasting your resume?
+            </h2>
+            <Show when="signed-out">
+              <Link
+                href="/sign-up"
+                className="group inline-flex items-center gap-1.5 rounded-full bg-accent text-accent-foreground px-6 py-3 text-sm font-semibold shadow-[var(--shadow-card)] hover:bg-accent-hover hover:shadow-[var(--shadow-card-hover)] transition-all"
+              >
+                Get started free
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </Show>
+            <Show when="signed-in">
+              <Link
+                href="/dashboard"
+                className="group inline-flex items-center gap-1.5 rounded-full bg-accent text-accent-foreground px-6 py-3 text-sm font-semibold shadow-[var(--shadow-card)] hover:bg-accent-hover hover:shadow-[var(--shadow-card-hover)] transition-all"
+              >
+                Go to your dashboard
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </Show>
+          </div>
         </section>
       </main>
       <SiteFooter />
