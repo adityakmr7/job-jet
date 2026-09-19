@@ -2,14 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField, Profile } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
-import { fetchProfile, tailorResume, openResumeInNewTab, upsertApplication } from "../lib/api";
+import { fetchProfile, tailorResume, openResumeInNewTab, upsertApplication, mapFieldsWithLLM } from "../lib/api";
 import { runAutofillMapping } from "../lib/autofill-map";
+import { fillFieldsInMainWorld } from "../lib/main-world-fill";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 const AUTO_CONTINUE_POLL_MS = 1500;
 
 async function getActiveTab(): Promise<{ id?: number; hostname?: string; url?: string }> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // lastFocusedWindow, not currentWindow: this runs from the side panel's
+  // own extension page context, and currentWindow's resolution from a
+  // side panel (as opposed to a normal tab) isn't reliably the browser
+  // window it's docked to on every Chrome version — lastFocusedWindow is
+  // the more robust choice recommended for popup/side-panel contexts.
+  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   let hostname: string | undefined;
   try {
     hostname = tab?.url ? new URL(tab.url).hostname : undefined;
@@ -22,7 +28,18 @@ async function getActiveTab(): Promise<{ id?: number; hostname?: string; url?: s
 async function sendToContentScript<T = unknown>(message: ExtensionMessage): Promise<T> {
   const { id: tabId } = await getActiveTab();
   if (tabId == null) throw new Error("No active tab");
-  return chrome.tabs.sendMessage(tabId, message);
+  // frameId: 0 = the top-level document only. Without this, Chrome
+  // broadcasts to EVERY frame the content script is injected into
+  // (manifest has all_frames: true) — including third-party iframes like
+  // reCAPTCHA or a Maps/Places embed, which real ATS forms often carry.
+  // Those iframes have their own content-script instance too, and if
+  // THEIRS responds first (a tiny iframe document parses and responds
+  // faster than the real page), chrome.tabs.sendMessage's promise
+  // resolves with the iframe's empty result instead of the real page's —
+  // found live, against a real Greenhouse posting with a reCAPTCHA +
+  // Places-autocomplete iframe, as the actual cause of "0 fields
+  // detected" despite the real form clearly having fields.
+  return chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
 }
 
 function openSignIn() {
@@ -47,71 +64,158 @@ export function App() {
   const knownSelectorsRef = useRef<Set<string>>(new Set());
   const fillingRef = useRef(false);
   const lastHostnameRef = useRef<string | undefined>(undefined);
+  const isSignedInRef = useRef(isSignedIn);
+  useEffect(() => {
+    isSignedInRef.current = isSignedIn;
+  }, [isSignedIn]);
+
+  /** Re-reads "this page"'s fields + job description from whatever tab is
+   *  currently focused. The side panel is a single global page (Chrome's
+   *  sidePanel API doesn't give each tab its own instance unless you opt
+   *  into per-tab options, which this project doesn't) — it stays mounted
+   *  as the user switches tabs, so without an explicit refresh on tab
+   *  change, the panel keeps showing whatever tab was active when it was
+   *  first opened. Called on sign-in, on every tab switch, and whenever
+   *  the active tab navigates to a different site. */
+  async function refreshPageData() {
+    if (!isSignedInRef.current) return;
+    try {
+      const res = await sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
+        type: "REQUEST_FORM_FIELDS",
+      });
+      setFields(res.payload.fields);
+    } catch (err) {
+      // Was previously silent — surfaced now because a swallowed error
+      // here looks IDENTICAL in the UI to a genuine "no fields on this
+      // page" (both just show 0), which cost real debugging time working
+      // out that a failure, not an empty result, was behind a "0 fields"
+      // report. console.error is the best available signal today since
+      // the side panel's own devtools console isn't reachable from
+      // outside it — open the panel, right-click it, Inspect, to see this.
+      console.error("[job-jet] REQUEST_FORM_FIELDS failed:", err);
+      setFields([]);
+    }
+    try {
+      const res = await sendToContentScript<{ type: string; payload: { text: string; title?: string } }>({
+        type: "EXTRACT_JOB_DESCRIPTION",
+      });
+      setJobDescription(res.payload.text);
+      setJobTitle(res.payload.title);
+    } catch (err) {
+      console.error("[job-jet] EXTRACT_JOB_DESCRIPTION failed:", err);
+      setJobDescription("");
+      setJobTitle(undefined);
+    }
+  }
 
   useEffect(() => {
     if (!isSignedIn) return;
-    sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
-      type: "REQUEST_FORM_FIELDS",
-    })
-      .then((res) => setFields(res.payload.fields))
-      .catch(() => setStatus("Couldn't read the form on this page."));
-
-    sendToContentScript<{ type: string; payload: { text: string; title?: string } }>({
-      type: "EXTRACT_JOB_DESCRIPTION",
-    })
-      .then((res) => {
-        setJobDescription(res.payload.text);
-        setJobTitle(res.payload.title);
-      })
-      .catch(() => {});
-
+    refreshPageData();
     getActiveTab().then(({ hostname }) => {
       lastHostnameRef.current = hostname;
     });
   }, [isSignedIn]);
 
-  // Safety net for auto-continue: if the active tab navigates to a
-  // genuinely different site, stop trying to fill it. Compares hostname
-  // only (not the full URL) — a wizard step advancing via pushState/hash
-  // change (our own test fixture does this, and so do plenty of real ATS
-  // wizards) must NOT be treated as "navigated away", only an actual
-  // change of site should disarm.
+  // Re-sync "this page" whenever the user switches to a different tab —
+  // otherwise the summary above (and what Autofill would report before
+  // it re-scans on click) stays stuck on whichever tab was active when
+  // the panel first opened. See refreshPageData's doc comment.
+  useEffect(() => {
+    function handleActivated() {
+      refreshPageData();
+    }
+    chrome.tabs.onActivated.addListener(handleActivated);
+    return () => chrome.tabs.onActivated.removeListener(handleActivated);
+  }, []);
+
+  // Two independent things keyed off the SAME tab-update event, on
+  // purpose kept in one listener since they share the changeInfo/tab
+  // params:
+  //
+  // 1. Auto-continue safety net: disarm as soon as the active tab's URL
+  //    changes to a genuinely different HOSTNAME (fires early, at
+  //    navigation start, so a mid-fill auto-continue stops promptly
+  //    rather than fighting a page the user's already left). Hostname
+  //    only, not the full URL — a wizard step advancing via
+  //    pushState/hash change (our own test fixture does this, and so do
+  //    plenty of real ATS wizards) must NOT be treated as "navigated
+  //    away".
+  //
+  // 2. Re-sync "this page"'s fields/JD whenever the active tab finishes
+  //    loading ANY page — deliberately NOT gated on the hostname having
+  //    changed. Found the hard way: closing one job-posting tab and
+  //    opening a fresh one on the SAME ATS domain (e.g. two different
+  //    Greenhouse postings) is a different physical tab/content-script
+  //    instance even though the hostname string is identical to
+  //    whatever was last recorded — a hostname-equality check skips the
+  //    refresh for that case even though the old cached fields/JD are
+  //    from an entirely different, now-gone page. `status === "complete"`
+  //    is the actual right signal for "a real navigation just finished
+  //    on the active tab", independent of whether the hostname matches
+  //    the previous one.
   useEffect(() => {
     function handleTabUpdate(_tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) {
-      if (!changeInfo.url || !tab.active) return;
-      let hostname: string | undefined;
-      try {
-        hostname = new URL(changeInfo.url).hostname;
-      } catch {
-        return;
+      if (!tab.active) return;
+
+      if (changeInfo.url) {
+        let hostname: string | undefined;
+        try {
+          hostname = new URL(changeInfo.url).hostname;
+        } catch {
+          hostname = undefined;
+        }
+        if (hostname) {
+          if (lastHostnameRef.current && hostname !== lastHostnameRef.current) {
+            setAutoContinue(false);
+            profileRef.current = null;
+            knownSelectorsRef.current = new Set();
+          }
+          lastHostnameRef.current = hostname;
+        }
       }
-      if (lastHostnameRef.current && hostname !== lastHostnameRef.current) {
-        setAutoContinue(false);
-        profileRef.current = null;
-        knownSelectorsRef.current = new Set();
+
+      if (changeInfo.status === "complete") {
+        refreshPageData();
       }
-      lastHostnameRef.current = hostname;
     }
     chrome.tabs.onUpdated.addListener(handleTabUpdate);
     return () => chrome.tabs.onUpdated.removeListener(handleTabUpdate);
   }, []);
 
   /** Maps + fills `fieldsToFill` and reports the result. Shared by the
-   *  manual click and the auto-continue poll below. */
+   *  manual click and the auto-continue poll below.
+   *
+   *  Tiers 1+2 (heuristic + known-site adapter, both client-side and
+   *  instant) run first via runAutofillMapping. Whatever's left over —
+   *  fields neither recognized by wording nor by a per-site adapter, and
+   *  that aren't file inputs (never scriptable) — goes to tier 3: a
+   *  backend call that asks an LLM to match them against a closed set of
+   *  known profile attributes, backed by a crowdsourced per-domain cache
+   *  (see apps/web's /api/autofill/map) so the same field wording on the
+   *  same ATS only ever costs one real model call across ALL users. */
   async function fillFields(fieldsToFill: DetectedField[], profile: Profile, hostname: string, auto: boolean) {
     const mapped = runAutofillMapping(fieldsToFill, profile, hostname);
-    if (mapped.length === 0) {
+
+    const claimed = new Set(mapped.map((m) => m.selector));
+    const unresolved = fieldsToFill.filter((f) => !claimed.has(f.selector) && f.type !== "file");
+    const llmMapped = unresolved.length > 0 ? await mapFieldsWithLLM(getToken, hostname, unresolved) : [];
+
+    const allMapped = [...mapped, ...llmMapped];
+    if (allMapped.length === 0) {
       if (!auto) setStatus("Didn't recognize any fields we could fill on this page.");
       return;
     }
-    const values = Object.fromEntries(mapped.map((m) => [m.selector, m.value]));
-    const result = await sendToContentScript<{ filled: number; total: number }>({
-      type: "AUTOFILL_REQUEST",
-      payload: { values },
-    });
+    const values = Object.fromEntries(allMapped.map((m) => [m.selector, m.value]));
+    const { id: tabId } = await getActiveTab();
+    if (tabId == null) throw new Error("No active tab");
+    // Main-world injection, not a content-script message — see
+    // main-world-fill.ts for why: on a real React-controlled form,
+    // isolated-world event dispatch silently doesn't stick.
+    const result = await fillFieldsInMainWorld(tabId, values);
+    const smartMatchNote = llmMapped.length > 0 ? ` (${llmMapped.length} via smart match)` : "";
     const prefix = auto
-      ? `Auto-filled ${result.filled} more field${result.filled === 1 ? "" : "s"} on this step`
-      : `Filled ${result.filled} of ${result.total} fields`;
+      ? `Auto-filled ${result.filled} more field${result.filled === 1 ? "" : "s"} on this step${smartMatchNote}`
+      : `Filled ${result.filled} of ${result.total} fields${smartMatchNote}`;
     setStatus(
       `${prefix} — some fields (file uploads, demographic questions, open-ended questions) ` +
         `need your input. Double-check before submitting.`

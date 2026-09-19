@@ -36,3 +36,33 @@ export const FieldMappingSchema = z.object({
 
 export type DetectedField = z.infer<typeof DetectedFieldSchema>;
 export type FieldMapping = z.infer<typeof FieldMappingSchema>;
+
+/**
+ * Normalizes a field's label/placeholder/name/id + type into a stable
+ * lookup key for the `field_mappings` cache. Deliberately prefers label
+ * text over `name`/`id` — Greenhouse's custom "question_*" fields (and
+ * plenty of other ATSs) keep a consistent human-readable label ("LinkedIn
+ * Profile", "Are you authorized to work in the US?") across postings even
+ * though their id/name attributes are per-posting-random — matching on
+ * label is what makes the cache actually hit on the second posting, not
+ * just the second visit to the exact same one.
+ *
+ * Plain function, not a zod schema — safe to import from either app
+ * regardless of which zod major version that app is on (only the schema
+ * *objects* in this file are version-sensitive at the `generateObject`/
+ * `safeParse` call site; see apps/web's resume-parse.ts and
+ * resume-tailor.ts for why those keep local schema duplicates instead of
+ * importing the ones above directly).
+ */
+export function computeFieldSignature(
+  field: Pick<DetectedField, "label" | "name" | "id" | "placeholder" | "type">
+): string {
+  const raw = field.label || field.placeholder || field.name || field.id || "";
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[*]/g, "") // strip required-field asterisks
+    .replace(/[^a-z0-9\s]/g, " ") // strip punctuation
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${normalized}::${field.type}`;
+}

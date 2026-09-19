@@ -87,6 +87,8 @@ export function mapProfileToFields(
       value = mostRecentEducation.school;
     } else if (matches(field, /degree/i) && mostRecentEducation) {
       value = mostRecentEducation.degree;
+    } else if (matches(field, /discipline|field.?of.?study|\bmajor\b/i) && mostRecentEducation) {
+      value = mostRecentEducation.fieldOfStudy;
     }
 
     if (value) results.push({ selector: field.selector, value });

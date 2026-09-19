@@ -1,4 +1,4 @@
-import type { Profile } from "@job-jet/shared";
+import type { DetectedField, Profile } from "@job-jet/shared";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 
@@ -58,6 +58,37 @@ export async function openResumeInNewTab(getToken: () => Promise<string | null>,
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
   chrome.tabs.create({ url: objectUrl });
+}
+
+/** Tier 3 of the autofill engine — for fields the heuristic + adapter
+ *  tiers (autofill-map.ts, entirely client-side) didn't recognize, asks
+ *  the backend to match them against a fixed set of known profile
+ *  attributes via an LLM call, backed by a crowdsourced per-domain cache
+ *  so repeat wording only ever hits the model once. Best-effort: returns
+ *  an empty array rather than throwing on any failure (rate limit, no
+ *  profile yet, network hiccup) — this tier supplements tiers 1/2, it
+ *  should never be able to make Autofill itself fail. */
+export async function mapFieldsWithLLM(
+  getToken: () => Promise<string | null>,
+  domain: string,
+  fields: DetectedField[]
+): Promise<{ selector: string; value: string }[]> {
+  try {
+    const token = await getToken();
+    if (!token) return [];
+
+    const res = await fetch(`${SYNC_HOST}/api/autofill/map`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ domain, fields }),
+    });
+    if (!res.ok) return [];
+
+    const body = await res.json().catch(() => ({}));
+    return Array.isArray(body.mappings) ? body.mappings : [];
+  } catch {
+    return [];
+  }
 }
 
 type ApplicationUpsert = {

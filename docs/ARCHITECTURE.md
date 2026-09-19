@@ -88,18 +88,20 @@ On a positive detection, a floating button is injected into a **shadow
 DOM** (`floating-button.ts`) so the host page's CSS can never clash with
 or override it. Clicking it opens `chrome.sidePanel`.
 
-## Autofill: three planned tiers, two built
+## Autofill: three tiers, all built
 
 ```
-1. Heuristic (built)        — client-side keyword matching, no network cost
-                               beyond fetching the profile itself.
+1. Heuristic (built)       — client-side keyword matching, no network cost
+                              beyond fetching the profile itself.
 2. Known-site adapter (built for Greenhouse + Lever) — targets each
-                               platform's documented, stable field ids/names
-                               directly instead of guessing from label text.
-3. LLM fallback (not built) — whatever tiers 1–2 miss, sent to the backend,
-                               mapped against the profile schema, cached
-                               per-domain in `field_mappings` so repeat
-                               visits to the same ATS don't re-hit the LLM.
+                              platform's documented, stable field ids/names
+                              directly instead of guessing from label text.
+3. LLM fallback (built)    — whatever tiers 1–2 miss, sent to the backend,
+                              matched against a closed set of known profile
+                              attributes, cached per-domain in
+                              `field_mappings` so the same field wording on
+                              the same ATS only ever costs one real model
+                              call across ALL users, not one per user.
 ```
 
 **Tier 1** (`apps/extension/src/lib/autofill-map.ts`) matches each detected
@@ -125,17 +127,46 @@ via two different selectors aimed at the same element).
 
 Deliberately **not** covered by the adapters: each platform's per-job
 custom questions (Greenhouse's `question_<id>`, Lever's
-`cards[<uuid>][fieldN]`) — their ids/names aren't stable across postings,
-and the questions themselves are often genuinely open-ended ("what's the
-hardest technical challenge you've faced"), unanswerable from a static
-profile field. That's what tier 3 (LLM fallback, using the profile + job
-description as context) is for.
+`cards[<uuid>][fieldN]`) — their ids/names aren't stable across postings.
+Their *labels* often are, though ("LinkedIn Profile", "Are you legally
+authorized to work in the US?") — that's tier 3's job.
 
 Verified against real captured field data from both live postings
 (`apps/extension/scripts/verify-adapters.ts`, `npm run verify:adapters`):
 correctly fills 7/11 Greenhouse fields and 8/10 Lever fields, correctly
 skipping file inputs, EEO fields, and genuinely open-ended questions in
 both cases.
+
+**Tier 3** (`apps/extension/src/lib/api.ts`'s `mapFieldsWithLLM`,
+`apps/web/src/app/api/autofill/map/route.ts`) runs only on whatever tiers
+1–2 left unclaimed on a given fill (and never on file inputs — those are
+never scriptable regardless of tier). It's "safe by construction" the same
+way resume-tailor.ts is: **the model never sees or returns an actual
+value**. It's given each unmatched field's label/name/placeholder/type and
+a fixed, hand-written list of ~16 known profile attributes (`fullName`,
+`email`, `linkedin`, `currentCompany`, `authorizedToWork`, etc. — see
+`apps/web/src/lib/field-paths.ts`), and picks a KEY from that list per
+field, or `null` if none confidently apply (open-ended questions, salary
+expectations, "how did you hear about us" — this tier isn't meant to
+invent answers to those). The real value is then resolved from the user's
+*actual* profile in code, after the model call returns — a hallucinated or
+malformed key just fails to resolve, the field stays unfilled, nothing
+fabricated ever reaches the page.
+
+Before any model call, each field is normalized into a `fieldSignature`
+(`packages/shared/src/field-mapping.ts`'s `computeFieldSignature` — label
+text over id/name, since ids like `question_19432571004` are
+per-posting-random but labels usually aren't) and checked against the
+crowdsourced `field_mappings` table, keyed by `(domain, fieldSignature)`.
+Only genuine cache misses reach the LLM; a mapping decision, once made,
+benefits every user who hits that same field wording on that domain again
+— the cache stores *which attribute a label means*, never any user's
+actual value, so it's safe to share across users. Cache hits also get
+their `hitCount` bumped (best-effort, not on the response's critical
+path). If the LLM call itself fails (rate limit, model hiccup), tier 3
+degrades to a no-op rather than surfacing an error — it's strictly
+additive on top of tiers 1–2, never something that can make Autofill
+itself fail.
 
 Two things it **deliberately never fills**, by design, not oversight:
 - **File inputs** (resume uploads) — browsers restrict scripted
@@ -185,7 +216,7 @@ the real request.
 | `profiles` | One per user: the structured data autofill reads from and the profile dashboard editor writes to. |
 | `resumes` | Every uploaded original and AI-tailored version — structured content, Blob URL, `kind` (`uploaded_original` / `ai_tailored`). |
 | `applications` | Job tracker — schema exists (`status`: detected → draft → applied → interviewing → rejected/offer), **not yet wired to any UI**. |
-| `field_mappings` | Crowdsourced, cross-user: once one person's form gets mapped for a domain, everyone hitting that domain benefits without re-asking the LLM. For the not-yet-built tier-3 autofill. |
+| `field_mappings` | Crowdsourced, cross-user: once one person's form gets mapped for a domain, everyone hitting that domain benefits without re-asking the LLM. Backs tier-3 autofill (`/api/autofill/map`). |
 
 ## AI: Gemini, and why this specific model
 
@@ -442,10 +473,20 @@ existed).
 
 ## Known gaps / next up
 
-- Autofill tier 3 (LLM fallback + `field_mappings` cache) — not built.
-  Known-site adapters (tier 2) built for Greenhouse and Lever; Workday,
+- Known-site adapters (tier 2) built for Greenhouse and Lever only; Workday,
   Ashby, iCIMS, SmartRecruiters are on the known-ATS hostname list for
-  detection but don't have adapters yet.
+  detection but don't have adapters yet — tier 3 (LLM fallback, now built)
+  is what covers them in the meantime, at the cost of a model call on
+  first sight of each field wording per domain instead of an instant,
+  free, exact match.
+- Tier 3's allow-list (`field-paths.ts`) covers ~16 scalar profile
+  attributes — the same ones tiers 1/2 already target. It doesn't reach
+  into `additionalQuestions` (free-form Q&A the profile schema already has
+  room for but no UI writes to yet) or attempt genuinely open-ended
+  questions (cover letters, "why us", salary expectations) — those stay
+  unanswerable by design, not oversight; inventing an answer to a real
+  application question is a different, much riskier feature than matching
+  a label to an already-known fact.
 - File-input autofill (attaching a resume automatically via the
   `DataTransfer` workaround) — not implemented; the side panel tells the
   user explicitly that file fields need manual attachment.

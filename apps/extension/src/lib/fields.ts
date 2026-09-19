@@ -64,33 +64,9 @@ export function collectFormFields(): DetectedField[] {
   });
 }
 
-/** Sets a value on a field found by the selector produced above, dispatching
- *  the events frameworks (React/Vue-controlled inputs) listen for so the
- *  site's own state updates, not just the DOM attribute. */
-export function setFieldValue(selector: string, value: string): boolean {
-  const el = document.querySelector<HTMLElement>(selector);
-  if (!el) return false;
-
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-    const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
-    setter?.call(el, value);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-    return true;
-  }
-
-  if (el instanceof HTMLSelectElement) {
-    const match = Array.from(el.options).find(
-      (o) => o.textContent?.trim().toLowerCase() === value.trim().toLowerCase()
-    );
-    if (match) {
-      el.value = match.value;
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    }
-    return false;
-  }
-
-  return false;
-}
+// setFieldValue used to live here, called via a content-script message
+// (isolated world). Moved to main-world-fill.ts and now runs via
+// chrome.scripting.executeScript({world: "MAIN"}) instead — found live,
+// against a real React SPA, that isolated-world event dispatch silently
+// doesn't stick (the write appears to succeed, then reverts on next
+// render). See main-world-fill.ts's doc comment for the full story.

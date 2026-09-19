@@ -41,7 +41,28 @@ export default defineManifest((configEnv: ConfigEnv) => {
         matches: ["<all_urls>"],
         js: ["src/content/index.ts"],
         run_at: "document_idle",
-        all_frames: true,
+        // Top frame only. Found live, on two separate real sites, why
+        // all_frames: true is actively harmful with nothing to show for
+        // it today: (1) job-boards.greenhouse.io's reCAPTCHA + Places-
+        // autocomplete iframes each got their own content-script
+        // instance, and chrome.tabs.sendMessage (no frameId given)
+        // broadcasts to every frame — whichever iframe's empty
+        // collectFormFields() result happened to respond first silently
+        // beat the real page's, surfacing as "0 fields detected" despite
+        // the real form clearly having fields. (2) linkedin.com/feed
+        // mounted the floating button three times on one page — once in
+        // the top document and once in each of two same-origin internal
+        // iframes, each independently passing the detection heuristic;
+        // mountFloatingButton()'s existing "already mounted" guard only
+        // checks within one document, so it can't prevent a second
+        // mount in a different frame's own DOM. No ATS we currently
+        // support is iframe-embedded, so there's no present use case
+        // this trades away — if one shows up, it should be a deliberate,
+        // targeted feature (the top frame scanning for known-ATS iframe
+        // src URLs and messaging that specific frame), not blanket
+        // injection into every iframe on every page (ads, trackers,
+        // embeds included).
+        all_frames: false,
       },
     ],
     side_panel: {

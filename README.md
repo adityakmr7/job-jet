@@ -61,9 +61,11 @@ writeup, including what got found by inspecting two real live job postings:
    id/name directly rather than guessing from label text. Verified against
    real captured field data from live postings on both platforms
    (`npm run verify:adapters --workspace=apps/extension`).
-3. **LLM fallback** (not built) — unmatched fields sent to the backend,
-   mapped against the user's profile schema, cached per-domain in the
-   `field_mappings` table so repeat visits to the same ATS don't re-hit the LLM.
+3. **LLM fallback** (done) — `apps/web/src/app/api/autofill/map`. Fields
+   tiers 1–2 miss get matched against a closed set of known profile
+   attributes (never a raw value — see `apps/web/src/lib/field-paths.ts`),
+   cached per-domain in the `field_mappings` table so repeat visits to the
+   same ATS don't re-hit the LLM.
 
 Known limitation: browsers restrict script-set `input[type=file].files` for
 security, so resume/file fields are never auto-filled — the side panel
@@ -141,7 +143,15 @@ sites but is not implemented yet.
       skills, valid downloaded PDF. Download works cross-origin from the
       extension too (the Blob store is private, so this needed its own
       authenticated streaming route, not just a public URL).
-- [ ] LLM fallback field-mapping + crowdsourced cache.
+- [x] LLM fallback field-mapping + crowdsourced cache (autofill tier 3) —
+      `POST /api/autofill/map`. Safe by construction like resume tailoring:
+      the model only ever picks a key from a closed, hand-written list of
+      known profile attributes (`apps/web/src/lib/field-paths.ts`), never
+      returns a value — the real value is resolved from the user's actual
+      profile in code. Backed by the crowdsourced `field_mappings` table
+      (keyed by domain + normalized field signature), so the same field
+      wording on the same ATS only costs one real model call across all
+      users, not one per user.
 - [x] Application tracking dashboard — full CRUD, auto-populated by the
       extension on Autofill/tailor, grouped-by-status board at
       `/dashboard/applications`. Verified end-to-end (create, upsert-by-url

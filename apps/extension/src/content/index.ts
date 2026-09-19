@@ -1,74 +1,91 @@
 import { detectJobApplication } from "../lib/detect";
 import { mountFloatingButton, unmountFloatingButton } from "./floating-button";
-import { collectFormFields, setFieldValue } from "../lib/fields";
+import { collectFormFields } from "../lib/fields";
 import { extractJobDescription, extractJobTitle } from "../lib/jd-extract";
 import type { ExtensionMessage } from "../lib/messages";
 
-let lastUrl = location.href;
-let debounceTimer: number | undefined;
+/**
+ * Guard against running setup twice in the same document. Chrome
+ * automatically re-injects content scripts into already-open matching
+ * tabs whenever the extension reloads/updates (an MV3 convenience feature
+ * so you don't have to manually refresh every open tab) — but it does NOT
+ * tear down the previous injection's listeners/observers first. Left
+ * unguarded, every extension reload while a job page is already open
+ * stacks another `chrome.runtime.onMessage` listener onto that page, and
+ * multiple listeners racing to answer the same message is exactly what
+ * caused fields to "flicker" between 0 and a real count during testing —
+ * whichever stale/fresh listener happened to respond first won. Found by
+ * noticing the same "[job-jet] extension id" diagnostic log appearing
+ * many times in one page's console with no matching page reload.
+ */
+const GUARD_KEY = "__jobJetContentScriptLoaded";
+const globalWindow = window as unknown as Record<string, boolean>;
 
-// Diagnostic: lets us confirm the loaded extension's real ID against the
-// one computed from its unpacked directory path (needed to register
-// Clerk's allowed_origins for cross-origin session sync).
-console.log("[job-jet] extension id:", chrome.runtime.id);
+if (globalWindow[GUARD_KEY]) {
+  console.log("[job-jet] content script already active in this page — skipping re-init");
+} else {
+  globalWindow[GUARD_KEY] = true;
 
-function runDetection() {
-  const result = detectJobApplication();
+  let lastUrl = location.href;
+  let debounceTimer: number | undefined;
 
-  if (result.isJobApplication) {
-    mountFloatingButton(() => {
+  // Diagnostic: lets us confirm the loaded extension's real ID against the
+  // one computed from its unpacked directory path (needed to register
+  // Clerk's allowed_origins for cross-origin session sync).
+  console.log("[job-jet] extension id:", chrome.runtime.id);
+
+  const runDetection = () => {
+    const result = detectJobApplication();
+
+    if (result.isJobApplication) {
+      mountFloatingButton(() => {
+        chrome.runtime.sendMessage<ExtensionMessage>({
+          type: "OPEN_SIDE_PANEL",
+          payload: { tabId: -1 }, // background fills in the real tab id
+        });
+      });
       chrome.runtime.sendMessage<ExtensionMessage>({
-        type: "OPEN_SIDE_PANEL",
-        payload: { tabId: -1 }, // background fills in the real tab id
+        type: "JOB_DETECTED",
+        payload: { url: location.href, confidence: result.confidence, signals: result.signals },
       });
-    });
-    chrome.runtime.sendMessage<ExtensionMessage>({
-      type: "JOB_DETECTED",
-      payload: { url: location.href, confidence: result.confidence, signals: result.signals },
-    });
-  } else {
-    unmountFloatingButton();
-  }
-}
-
-function scheduleDetection() {
-  window.clearTimeout(debounceTimer);
-  debounceTimer = window.setTimeout(runDetection, 400);
-}
-
-// Initial run.
-scheduleDetection();
-
-// Job boards are almost all SPAs — watch for client-side route changes since
-// there's no full page load to re-trigger the content script.
-new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    scheduleDetection();
-  }
-}).observe(document.body, { childList: true, subtree: true });
-
-window.addEventListener("popstate", scheduleDetection);
-
-// Respond to requests from the side panel (relayed via background).
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-  switch (message.type) {
-    case "REQUEST_FORM_FIELDS":
-      sendResponse({ type: "FORM_FIELDS_RESULT", payload: { fields: collectFormFields() } });
-      return true;
-    case "EXTRACT_JOB_DESCRIPTION":
-      sendResponse({
-        type: "JOB_DESCRIPTION_RESULT",
-        payload: { text: extractJobDescription(), title: extractJobTitle() },
-      });
-      return true;
-    case "AUTOFILL_REQUEST": {
-      const entries = Object.entries(message.payload.values);
-      const filled = entries.filter(([selector, value]) => setFieldValue(selector, value)).length;
-      sendResponse({ filled, total: entries.length });
-      return true;
+    } else {
+      unmountFloatingButton();
     }
-    default:
-      return false;
-  }
-});
+  };
+
+  const scheduleDetection = () => {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(runDetection, 400);
+  };
+
+  // Initial run.
+  scheduleDetection();
+
+  // Job boards are almost all SPAs — watch for client-side route changes
+  // since there's no full page load to re-trigger the content script.
+  new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      scheduleDetection();
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+
+  window.addEventListener("popstate", scheduleDetection);
+
+  // Respond to requests from the side panel (relayed via background).
+  chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+    switch (message.type) {
+      case "REQUEST_FORM_FIELDS":
+        sendResponse({ type: "FORM_FIELDS_RESULT", payload: { fields: collectFormFields() } });
+        return true;
+      case "EXTRACT_JOB_DESCRIPTION":
+        sendResponse({
+          type: "JOB_DESCRIPTION_RESULT",
+          payload: { text: extractJobDescription(), title: extractJobTitle() },
+        });
+        return true;
+      default:
+        return false;
+    }
+  });
+}
