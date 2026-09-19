@@ -104,10 +104,15 @@ sites but is not implemented yet.
       with `__experimental_syncHostListener` (live session sync instead of
       requiring the panel to be closed/reopened — a known limitation of the
       SDK without that flag), manifest updated with the `cookies` permission
-      it needs. **Not yet fully verified**: needs the built extension's ID
-      registered in Clerk's `allowed_origins` (one-time, via the Backend
-      API) before cross-origin session sync will actually work — waiting on
-      the extension ID from loading it unpacked.
+      it needs. Extension ID registered in Clerk's `allowed_origins` via
+      the Backend API. **Fully verified live**: autofill ran against a
+      real signed-in profile (not test data) via the actual side panel —
+      correct fields filled, EEO/file/no-data-source fields correctly
+      skipped, confirmed against the profile's real (unset) data via the
+      API rather than assumed.
+- [x] Auto-continue for multi-step forms, and a full application tracker
+      (auto-populated by the extension, managed from the dashboard) — see
+      `docs/ARCHITECTURE.md`.
 - [x] Local test fixtures for the detection heuristic (see below): a
       single-step form, a 5-step wizard (fields only exist in the DOM for
       the active step, URL hash changes per step — the harder/more
@@ -137,24 +142,23 @@ sites but is not implemented yet.
       extension too (the Blob store is private, so this needed its own
       authenticated streaming route, not just a public URL).
 - [ ] LLM fallback field-mapping + crowdsourced cache.
-- [ ] Application tracking dashboard (`applications` table exists in the
-      schema, unused so far).
+- [x] Application tracking dashboard — full CRUD, auto-populated by the
+      extension on Autofill/tailor, grouped-by-status board at
+      `/dashboard/applications`. Verified end-to-end (create, upsert-by-url
+      dedup, status/notes updates through the real API, delete, per-user
+      scoping) — see `docs/ARCHITECTURE.md`.
 - [ ] Job matching / aggregation, referral networking, AI career-chat
       copilot — these need a real job-data source or partnership Job Jet
       doesn't have; not fabricating fake data to fill this in.
 
 ### Reload needed to test recent changes
 
-Two things changed since the extension was last loaded and need a manual
-reload in `chrome://extensions` (click the card's reload icon) before
-they're testable:
-- The autofill engine (Autofill button now actually fills fields).
-- A detection false-positive fix: the heuristic used to fire on Job Jet's
-  own landing page (it mentions "resume", "job description", "work
-  authorization" enough to look like an application page by text alone,
-  despite having zero real form fields) — found by dogfooding it. Text
-  keywords are no longer sufficient alone; real form-field evidence is
-  now required too.
+Reload the extension in `chrome://extensions` (its card's reload icon)
+after pulling changes to `apps/extension` — Chrome caches an already-loaded
+unpacked extension and won't pick up on-disk changes on its own. As of the
+auto-continue and application-tracker work, that's the one thing not yet
+live-verified through the actual extension UI (the backend side of the
+tracker is fully verified independently — see `docs/ARCHITECTURE.md`).
 
 ## Testing the extension against fixture pages
 

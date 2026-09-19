@@ -17,6 +17,7 @@ export const ApplicationSchema = z.object({
   company: z.string().optional(),
   jobTitle: z.string().optional(),
   jobDescription: z.string().optional(),
+  notes: z.string().optional(),
   resumeId: z.string().optional(),
   status: ApplicationStatusSchema,
   createdAt: z.string(),

@@ -1,7 +1,7 @@
 import { detectJobApplication } from "../lib/detect";
 import { mountFloatingButton, unmountFloatingButton } from "./floating-button";
 import { collectFormFields, setFieldValue } from "../lib/fields";
-import { extractJobDescription } from "../lib/jd-extract";
+import { extractJobDescription, extractJobTitle } from "../lib/jd-extract";
 import type { ExtensionMessage } from "../lib/messages";
 
 let lastUrl = location.href;
@@ -57,7 +57,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       sendResponse({ type: "FORM_FIELDS_RESULT", payload: { fields: collectFormFields() } });
       return true;
     case "EXTRACT_JOB_DESCRIPTION":
-      sendResponse({ type: "JOB_DESCRIPTION_RESULT", payload: { text: extractJobDescription() } });
+      sendResponse({
+        type: "JOB_DESCRIPTION_RESULT",
+        payload: { text: extractJobDescription(), title: extractJobTitle() },
+      });
       return true;
     case "AUTOFILL_REQUEST": {
       const entries = Object.entries(message.payload.values);

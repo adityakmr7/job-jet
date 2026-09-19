@@ -358,16 +358,82 @@ downloaded file passed a magic-byte check (`%PDF-`) with the right
 content-type and a plausible size, and the dashboard's resume list update
 was confirmed live in the browser.
 
+## Auto-continue: multi-step forms without re-clicking Autofill
+
+The first manual "Autofill" click arms auto-continue for the rest of that
+page: the side panel polls (every 1.5s, `AUTO_CONTINUE_POLL_MS` in
+`App.tsx`) for fields that weren't there last time it looked — a wizard
+step advancing — and fills just those, no repeat click needed.
+
+**Why polling, not a `MutationObserver` message from the content script**:
+detecting "new fields appeared" is something the content script could do
+on its own, but *acting* on them (fetch the profile, map it) needs the
+Clerk session, which only exists in the side panel's React context — the
+content script is an isolated world with no access to it. So the content
+script stays dumb (it just answers `REQUEST_FORM_FIELDS` on request, same
+as the manual path) and the side panel does the noticing.
+
+**Safety net**: if the active tab navigates to a genuinely different site
+(hostname change), auto-continue disarms itself rather than keep trying to
+fill a page the user has moved on from. Deliberately *not* triggered by
+every URL change — `history.pushState` on the *same* hostname (which is
+exactly how this project's own multi-step test fixture, and plenty of real
+ATS wizards, advance between steps) must not be treated as "navigated
+away", or the feature would disarm itself on the very transition it exists
+to survive.
+
+**Real limitation, stated plainly**: this only works while the side panel
+stays open — there's no background-authenticated path yet, so closing the
+panel mid-wizard stops auto-continue (a manual click after reopening it
+picks back up from wherever the wizard is).
+
+## Application tracker
+
+`applications` (schema, unchanged from initial design) now has a full
+CRUD surface: `GET`/`POST /api/applications`, `PATCH`/`DELETE
+/api/applications/[id]`, all CORS-enabled the same way as every other
+extension-facing endpoint. A `notes` column and a unique `(userId, url)`
+index were added on top of the original schema.
+
+**Entries are created automatically, not manually** — the extension
+upserts one (fire-and-forget, `src/lib/api.ts`'s `upsertApplication`,
+swallows its own errors so a tracking failure never blocks the actual
+autofill/tailoring feature) whenever the user clicks **Autofill** or
+**Generate tailored resume** on a detected job page. That's a deliberate
+threshold: creating an entry on every page *visit* (tied to detection
+alone) would flood the tracker with postings glanced at and never acted
+on; tying it to actual engagement keeps it meaningful. The upsert is keyed
+on `(userId, url)`, so repeat engagement with the same posting updates the
+existing row (status, linked resume) instead of duplicating it —
+verified: POSTing the same URL twice with a different status returned the
+same row id and left the total count unchanged.
+
+The dashboard's `/dashboard/applications` page (`ApplicationsBoard.tsx`)
+groups entries by status (detected/draft → applied → interviewing → offer
+→ rejected, empty groups hidden) with an inline status dropdown, a resume
+picker linking any of the user's saved resumes, and a notes field that
+saves on blur. Deleting asks for confirmation via the browser's native
+`confirm()` — ordinary and appropriate for a real delete button in a web
+app (unrelated to the "don't trigger dialogs" rule that governs this
+project's own browser-automation *testing*, which is about not getting
+automation tooling stuck, not about how the shipped product should behave).
+
+Verified end-to-end in a real browser: created via `POST`, confirmed the
+upsert-by-url behavior doesn't duplicate, watched the status dropdown and
+notes textarea both persist through the real `PATCH` route (not just
+optimistic local state), confirmed `DELETE` removes it and the empty state
+returns cleanly, and confirmed the list is correctly scoped per-user (a
+second test account saw an empty tracker while the first account's data
+existed).
+
 ## Known gaps / next up
 
 - Autofill tier 3 (LLM fallback + `field_mappings` cache) — not built.
   Known-site adapters (tier 2) built for Greenhouse and Lever; Workday,
   Ashby, iCIMS, SmartRecruiters are on the known-ATS hostname list for
   detection but don't have adapters yet.
-- Application tracker UI — the `applications` table exists, nothing reads
-  or writes it yet.
-- The extension's ID isn't yet registered in Clerk's `allowed_origins`,
-  so cross-origin session sync is wired but unverified end-to-end.
 - File-input autofill (attaching a resume automatically via the
   `DataTransfer` workaround) — not implemented; the side panel tells the
   user explicitly that file fields need manual attachment.
+- Auto-continue has no background-auth path — see above; needs the panel
+  open.

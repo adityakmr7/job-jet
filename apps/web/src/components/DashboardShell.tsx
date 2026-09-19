@@ -1,13 +1,6 @@
-import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { UserRound, KanbanSquare, FileText } from "lucide-react";
 import { Logo } from "./Logo";
-
-const NAV = [
-  { label: "Profile", icon: UserRound, href: "/dashboard", active: true },
-  { label: "Applications", icon: KanbanSquare, soon: true },
-  { label: "Tailored resumes", icon: FileText, soon: true },
-];
+import { DashboardNav } from "./DashboardNav";
 
 export function DashboardShell({
   title,
@@ -26,37 +19,7 @@ export function DashboardShell({
         <div className="px-5 py-5 border-b border-border">
           <Logo size={26} />
         </div>
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            if (item.soon) {
-              return (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-muted cursor-not-allowed"
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon className="w-4 h-4" strokeWidth={2} />
-                    {item.label}
-                  </span>
-                  <span className="text-[10px] font-medium uppercase tracking-wide rounded-full border border-border px-1.5 py-0.5">
-                    Soon
-                  </span>
-                </div>
-              );
-            }
-            return (
-              <Link
-                key={item.label}
-                href={item.href!}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium bg-accent-soft text-accent"
-              >
-                <Icon className="w-4 h-4" strokeWidth={2} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <DashboardNav />
         <div className="px-5 py-4 border-t border-border text-xs text-muted truncate">{email}</div>
       </aside>
 

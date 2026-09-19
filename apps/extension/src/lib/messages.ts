@@ -7,4 +7,4 @@ export type ExtensionMessage =
   | { type: "FORM_FIELDS_RESULT"; payload: { fields: unknown[] } }
   | { type: "AUTOFILL_REQUEST"; payload: { values: Record<string, string> } }
   | { type: "EXTRACT_JOB_DESCRIPTION" }
-  | { type: "JOB_DESCRIPTION_RESULT"; payload: { text: string } };
+  | { type: "JOB_DESCRIPTION_RESULT"; payload: { text: string; title?: string } };

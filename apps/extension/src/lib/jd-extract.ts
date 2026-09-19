@@ -21,3 +21,17 @@ export function extractJobDescription(): string {
   // input reasonably well when asked to extract the JD from it.
   return document.body?.innerText?.trim().slice(0, 20000) ?? "";
 }
+
+/**
+ * Best-effort job title guess, for labeling an application tracker entry —
+ * not shown anywhere that correctness-critical, so a rough guess (falling
+ * back to the page title) is an acceptable tradeoff against not guessing a
+ * company name at all (too unreliable across arbitrary site layouts to be
+ * worth attempting; left for the user to fill in on the tracker instead).
+ */
+export function extractJobTitle(): string | undefined {
+  const h1 = document.querySelector("h1")?.textContent?.trim();
+  if (h1 && h1.length < 150) return h1;
+  const title = document.title?.trim();
+  return title || undefined;
+}

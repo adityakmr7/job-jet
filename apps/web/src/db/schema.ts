@@ -78,21 +78,29 @@ export const applicationStatusEnum = pgEnum("application_status", [
   "offer",
 ]);
 
-export const applications = pgTable("applications", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  url: text("url").notNull(),
-  domain: text("domain").notNull(),
-  company: text("company"),
-  jobTitle: text("job_title"),
-  jobDescription: text("job_description"),
-  resumeId: uuid("resume_id").references(() => resumes.id, { onDelete: "set null" }),
-  status: applicationStatusEnum("status").notNull().default("detected"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const applications = pgTable(
+  "applications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    domain: text("domain").notNull(),
+    company: text("company"),
+    jobTitle: text("job_title"),
+    jobDescription: text("job_description"),
+    notes: text("notes"),
+    resumeId: uuid("resume_id").references(() => resumes.id, { onDelete: "set null" }),
+    status: applicationStatusEnum("status").notNull().default("detected"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // One tracked application per (user, url) — the extension upserts on this
+  // so visiting/autofilling the same posting again updates the existing
+  // row instead of creating a duplicate.
+  (table) => [uniqueIndex("applications_user_url_idx").on(table.userId, table.url)]
+);
 
 export const fieldMappingSourceEnum = pgEnum("field_mapping_source", [
   "heuristic",

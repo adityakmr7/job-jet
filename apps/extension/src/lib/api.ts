@@ -59,3 +59,28 @@ export async function openResumeInNewTab(getToken: () => Promise<string | null>,
   const objectUrl = URL.createObjectURL(blob);
   chrome.tabs.create({ url: objectUrl });
 }
+
+type ApplicationUpsert = {
+  url: string;
+  jobTitle?: string;
+  jobDescription?: string;
+  resumeId?: string;
+  status?: "draft";
+};
+
+/** Upserts an application tracker entry for `url` (by user+url, server
+ *  side) — called on meaningful engagement (autofilling, generating a
+ *  tailored resume), not on every page visit, so the tracker reflects
+ *  applications actually worked on rather than every job page glanced at. */
+export async function upsertApplication(
+  getToken: () => Promise<string | null>,
+  data: ApplicationUpsert
+): Promise<void> {
+  const token = await getToken();
+  if (!token) return; // best-effort — never block the actual feature on this
+  await fetch(`${SYNC_HOST}/api/applications`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  }).catch(() => {});
+}
