@@ -242,12 +242,18 @@ A token-based system rather than one-off Tailwind classes, defined once in
 `apps/web/src/app/globals.css` (`--background`, `--surface`, `--border`,
 `--muted`, `--accent`, plus shadow tokens) and mirrored with matching hex
 values in the extension's `sidepanel/styles.css`, so the web app and the
-extension read as one product rather than two. Light/dark both defined
-explicitly (`prefers-color-scheme`), including getting Clerk's own
-components (`<SignIn>`, `<UserButton>`, etc.) to follow the same dark mode
-— they need the CSS `color-scheme` property set on `:root`, not just a
-media query on our own tokens, to auto-adapt; missed initially, caught by
-actually toggling dark mode and looking.
+extension read as one product rather than two. **Light theme only, by
+deliberate choice** — `color-scheme: light` (not `light dark`) and no
+`prefers-color-scheme` media query, so the app renders light regardless of
+the visitor's OS setting; this also makes Clerk's own components
+(`<SignIn>`, `<UserButton>`, etc., which auto-adapt to the `color-scheme`
+property) stay light without any extra config. An earlier version of this
+system supported both themes — dropped in favor of light-only per explicit
+direction, along with the color palette itself (warm cream background,
+vivid green accent) taken from a reference image, restyling the brand mark
+to match (`logo-mark.svg`, the extension's baked icon PNGs, and the
+floating button's gradient all regenerated/recolored together so nothing
+was left mismatched).
 
 The dashboard is a proper app shell (`DashboardShell.tsx`): a sidebar with
 the current "Profile" section active and "Applications" / "Tailored

@@ -26,23 +26,23 @@ export function mountFloatingButton(onClick: () => void): void {
       gap: 8px;
       padding: 12px 18px;
       border-radius: 999px;
-      background: #6d28d9;
+      background: linear-gradient(135deg, #4ade80, #16a34a);
       color: white;
       font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       border: none;
       cursor: pointer;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      box-shadow: 0 4px 16px rgba(23, 23, 26, 0.2);
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
     .btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      box-shadow: 0 6px 20px rgba(23, 23, 26, 0.28);
     }
     .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #4ade80;
+      background: white;
     }
   `;
 

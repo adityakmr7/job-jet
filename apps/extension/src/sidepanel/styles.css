@@ -1,29 +1,17 @@
 :root {
-  color-scheme: light dark;
+  /* Light theme only, by design — no dark mode. */
+  color-scheme: light;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   /* Mirrors apps/web/src/app/globals.css's token values so the extension
      and the web app read as one product, not two. */
-  --background: #fafaf9;
-  --foreground: #18181b;
+  --background: #f7f6f1;
+  --foreground: #17171a;
   --surface: #ffffff;
-  --border: #e4e4e7;
-  --muted: #71717a;
-  --accent: #6d28d9;
-  --accent-hover: #5b21b6;
-  --accent-soft: #f5f3ff;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0b;
-    --foreground: #fafafa;
-    --surface: #18181b;
-    --border: #29292e;
-    --muted: #a1a1aa;
-    --accent: #8b5cf6;
-    --accent-hover: #a78bfa;
-    --accent-soft: rgba(139, 92, 246, 0.12);
-  }
+  --border: #e8e6df;
+  --muted: #78766e;
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-soft: #eafbf0;
 }
 
 * {
@@ -101,7 +89,7 @@ button.secondary {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-hover);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;

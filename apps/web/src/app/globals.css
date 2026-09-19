@@ -1,21 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  /* Lets Clerk's own components (which auto-adapt to this property) pick
-     up dark mode the same way our own tokens do below. */
-  color-scheme: light dark;
-  --background: #fafaf9;
-  --foreground: #18181b;
+  /* Light theme only, by design — no dark mode. */
+  color-scheme: light;
+  --background: #f7f6f1;
+  --foreground: #17171a;
   --surface: #ffffff;
-  --surface-hover: #f4f4f5;
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --muted: #71717a;
-  --accent: #6d28d9;
-  --accent-hover: #5b21b6;
+  --surface-hover: #f0efe9;
+  --border: #e8e6df;
+  --border-strong: #d8d5cc;
+  --muted: #78766e;
+  --accent: #16a34a;
+  --accent-hover: #15803d;
   --accent-foreground: #ffffff;
-  --accent-soft: #f5f3ff;
-  --shadow-color: 240 5% 10%;
+  --accent-soft: #eafbf0;
+  --shadow-color: 80 15% 10%;
 }
 
 @theme inline {
@@ -37,23 +36,6 @@
   --shadow-popover: 0 4px 12px hsl(var(--shadow-color) / 0.08), 0 16px 40px hsl(var(--shadow-color) / 0.14);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0b;
-    --foreground: #fafafa;
-    --surface: #18181b;
-    --surface-hover: #202023;
-    --border: #29292e;
-    --border-strong: #38383f;
-    --muted: #a1a1aa;
-    --accent: #8b5cf6;
-    --accent-hover: #a78bfa;
-    --accent-foreground: #ffffff;
-    --accent-soft: rgba(139, 92, 246, 0.12);
-    --shadow-color: 240 20% 2%;
-  }
-}
-
 * {
   border-color: var(--border);
 }
@@ -73,9 +55,7 @@ body {
 /* Chrome forces its own grey/yellow background on autofilled inputs via
    an inset box-shadow, overriding our token colors — this pushes it back
    to the page background (the shade the inputs already sit on, by design;
-   see the `input` background-vs-surface layering in ProfileEditor).
-   Found by actually looking at the profile form after Chrome autofilled a
-   field with saved form data. */
+   see the `input` background-vs-surface layering in ProfileEditor). */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {

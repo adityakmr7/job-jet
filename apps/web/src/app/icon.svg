@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
     <linearGradient id="jobjet-bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7c3aed" />
-      <stop offset="1" stop-color="#5b21b6" />
+      <stop offset="0" stop-color="#4ade80" />
+      <stop offset="1" stop-color="#16a34a" />
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#jobjet-bg)" />
