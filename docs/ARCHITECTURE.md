@@ -408,6 +408,20 @@ existing row (status, linked resume) instead of duplicating it —
 verified: POSTing the same URL twice with a different status returned the
 same row id and left the total count unchanged.
 
+**Real bug found by testing against the actual multi-step wizard, not
+just the single-step case**: the wizard fixture changes the URL hash per
+step (`#personal`, `#resume`, `#experience`...) via `history.pushState`.
+Autofilling across all 5 steps of a real run created 5 separate tracker
+entries for one application, because the upsert key was the *full* URL
+including that hash. Fixed by stripping the hash before dedup/storage in
+the `POST` handler — re-verified afterward by POSTing the same job under
+all 5 of that run's actual hash values: all 5 collapsed to one row, one
+id, stored URL with the hash gone. Query params are deliberately left
+alone (some ATS URLs encode the real job id there, unlike the hash in this
+case) — noted as a related, unfixed risk (a referral/UTM param on an
+otherwise-identical URL would still create a duplicate) rather than
+guessed at with a blind strip.
+
 The dashboard's `/dashboard/applications` page (`ApplicationsBoard.tsx`)
 groups entries by status (detected/draft → applied → interviewing → offer
 → rejected, empty groups hidden) with an inline status dropdown, a resume

@@ -32,6 +32,16 @@ export async function GET(req: Request) {
  * creating a duplicate; an explicit `status` is only applied if the
  * caller sends one; the DB default ("detected") only takes effect on the
  * very first insert.
+ *
+ * The hash fragment is stripped before dedup/storage — found by testing
+ * against a real multi-step wizard fixture, where each step changes the
+ * URL hash (#personal, #resume, #experience...) via history.pushState.
+ * Without stripping it, autofilling across a 5-step wizard created 5
+ * separate tracker entries for what is obviously one application. Query
+ * params are left as-is: some ATS URLs encode the actual job id there, so
+ * stripping them isn't safe to do blindly the way the hash is (referral
+ * UTM params on those same URLs are a related, unfixed risk — noted, not
+ * solved, since a real fix needs knowing which params are noise per site).
  */
 export async function POST(req: Request) {
   const headers = corsHeaders(req.headers.get("origin"));
@@ -39,12 +49,16 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
 
   const body = await req.json().catch(() => null);
-  const url = typeof body?.url === "string" ? body.url : "";
-  if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400, headers });
+  const rawUrl = typeof body?.url === "string" ? body.url : "";
+  if (!rawUrl) return NextResponse.json({ error: "Missing url" }, { status: 400, headers });
 
+  let url: string;
   let domain: string;
   try {
-    domain = new URL(url).hostname;
+    const parsed = new URL(rawUrl);
+    parsed.hash = "";
+    url = parsed.toString();
+    domain = parsed.hostname;
   } catch {
     return NextResponse.json({ error: "Invalid url" }, { status: 400, headers });
   }
