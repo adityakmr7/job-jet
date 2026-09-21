@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField, Profile } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
-import { fetchProfile, tailorResume, openResumeInNewTab, upsertApplication, mapFieldsWithLLM } from "../lib/api";
+import { fetchProfile, tailorResume, downloadResume, upsertApplication, mapFieldsWithLLM } from "../lib/api";
 import { runAutofillMapping } from "../lib/autofill-map";
 import { fillFieldsInMainWorld } from "../lib/main-world-fill";
 
@@ -225,19 +225,22 @@ export function App() {
   async function handleAutofill() {
     setStatus("Filling…");
     try {
-      const profile = await fetchProfile(getToken);
+      // Profile fetch (network) and field scan (local messaging) don't
+      // depend on each other — run them together rather than back to
+      // back. The scan is fast enough that this effectively hides its
+      // latency entirely behind the profile fetch instead of adding its
+      // own sequential chunk on top.
+      const [profile, res, { hostname, url }] = await Promise.all([
+        fetchProfile(getToken),
+        sendToContentScript<{ payload: { fields: DetectedField[] } }>({ type: "REQUEST_FORM_FIELDS" }),
+        getActiveTab(),
+      ]);
       if (!profile) {
         setStatus("No saved profile yet — add one in the Job Jet dashboard first.");
         return;
       }
       profileRef.current = profile;
 
-      // Fresh scan rather than the fields loaded on panel-open: on a
-      // multi-step form the fields on screen may have changed since then.
-      const [res, { hostname, url }] = await Promise.all([
-        sendToContentScript<{ payload: { fields: DetectedField[] } }>({ type: "REQUEST_FORM_FIELDS" }),
-        getActiveTab(),
-      ]);
       const currentFields = res.payload.fields;
       setFields(currentFields);
       knownSelectorsRef.current = new Set(currentFields.map((f) => f.selector));
@@ -298,9 +301,12 @@ export function App() {
     setStatus("Generating tailored resume — this can take a few seconds…");
     try {
       const resume = await tailorResume(getToken, jobDescription);
-      setStatus(`Opening "${resume.fileName}" in a new tab…`);
-      await openResumeInNewTab(getToken, resume.id);
-      setStatus(`Opened "${resume.fileName}" in a new tab. Attach it manually — browsers don't allow extensions to auto-fill file inputs.`);
+      setStatus(`Downloading "${resume.fileName}"…`);
+      await downloadResume(getToken, resume.id, resume.fileName);
+      setStatus(
+        `Downloaded "${resume.fileName}" — attach it manually on this page ` +
+          `(browsers don't allow extensions to auto-fill file inputs).`
+      );
 
       const { url } = await getActiveTab();
       if (url) upsertApplication(getToken, { url, jobTitle, jobDescription, resumeId: resume.id, status: "draft" });

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { computeFieldSignature, type Profile } from "@job-jet/shared";
 import { getDb } from "@/db";
@@ -107,12 +107,22 @@ export async function POST(req: Request) {
     }
   }
 
-  // Bump hitCount for cache hits — best-effort, doesn't block the response.
+  // Bump hitCount for cache hits — pure bookkeeping, not needed for the
+  // response. Scheduled via after() rather than a bare un-awaited
+  // promise: on Vercel, the function's execution environment can be torn
+  // down right after the response is sent, so a fire-and-forget promise
+  // that was never awaited isn't actually guaranteed to finish. after()
+  // is the platform's own mechanism for "run this once the response has
+  // gone out" — it keeps the invocation alive long enough for the work to
+  // complete without making the caller wait for it.
   if (cacheHitSignatures.length) {
-    db.update(fieldMappings)
-      .set({ hitCount: sql`${fieldMappings.hitCount} + 1`, updatedAt: new Date() })
-      .where(and(eq(fieldMappings.domain, domain), inArray(fieldMappings.fieldSignature, cacheHitSignatures)))
-      .catch(() => {});
+    after(() =>
+      db
+        .update(fieldMappings)
+        .set({ hitCount: sql`${fieldMappings.hitCount} + 1`, updatedAt: new Date() })
+        .where(and(eq(fieldMappings.domain, domain), inArray(fieldMappings.fieldSignature, cacheHitSignatures)))
+        .catch(() => {})
+    );
   }
 
   if (uncached.length > 0) {
@@ -140,16 +150,27 @@ export async function POST(req: Request) {
 
       // Cache the *decision* regardless of whether this particular user's
       // profile had data for it — the mapping (this label means X) is
-      // reusable even by a user whose own profile lacks X.
-      for (const row of newCacheRows) {
-        await db
-          .insert(fieldMappings)
-          .values({ ...row, source: "llm", confidence: 0.7, hitCount: 1 })
-          .onConflictDoUpdate({
-            target: [fieldMappings.domain, fieldMappings.fieldSignature],
-            set: { profileFieldPath: row.profileFieldPath, updatedAt: new Date() },
-          })
-          .catch(() => {});
+      // reusable even by a user whose own profile lacks X. Deferred via
+      // after() and run concurrently (not one row at a time) — this was
+      // previously awaited sequentially before responding, which meant
+      // every uncached custom question on the page added its own DB
+      // round trip to the user's wait, on top of the LLM call itself,
+      // for a write the response doesn't actually depend on.
+      if (newCacheRows.length) {
+        after(() =>
+          Promise.all(
+            newCacheRows.map((row) =>
+              db
+                .insert(fieldMappings)
+                .values({ ...row, source: "llm", confidence: 0.7, hitCount: 1 })
+                .onConflictDoUpdate({
+                  target: [fieldMappings.domain, fieldMappings.fieldSignature],
+                  set: { profileFieldPath: row.profileFieldPath, updatedAt: new Date() },
+                })
+                .catch(() => {})
+            )
+          )
+        );
       }
     } catch (err) {
       // LLM tier is best-effort on top of the two client-side tiers — a

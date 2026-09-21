@@ -42,11 +42,25 @@ export async function tailorResume(
   return body.resume;
 }
 
-/** Downloads a resume's PDF bytes and opens it in a new tab via an object
- *  URL — the resume store is private, so this needs the same Bearer-token
- *  fetch as everything else the extension pulls from the backend; a plain
- *  `chrome.tabs.create({url: blobUrl})` wouldn't carry that header. */
-export async function openResumeInNewTab(getToken: () => Promise<string | null>, resumeId: string): Promise<void> {
+/** Downloads a resume's PDF bytes and saves it straight to disk via
+ *  chrome.downloads — the resume store is private, so this needs the
+ *  same Bearer-token fetch as everything else the extension pulls from
+ *  the backend; a plain `chrome.downloads.download({url: backendUrl})`
+ *  wouldn't carry that header, hence fetching the bytes here first and
+ *  downloading the resulting object URL instead.
+ *
+ *  Deliberately a real download (chrome.downloads), not just opening
+ *  the PDF in a new tab: opening it only lets the user *view* it —
+ *  actually getting the file onto disk, ready to pick in the ATS
+ *  form's own file-upload dialog, needs a real save. Chrome's own PDF
+ *  viewer does have a download button, but relying on the user to find
+ *  and click it themselves is an unnecessary extra step for something
+ *  they came here specifically to attach to a form. */
+export async function downloadResume(
+  getToken: () => Promise<string | null>,
+  resumeId: string,
+  fileName: string
+): Promise<void> {
   const token = await getToken();
   if (!token) throw new Error("Not signed in");
 
@@ -57,7 +71,11 @@ export async function openResumeInNewTab(getToken: () => Promise<string | null>,
 
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
-  chrome.tabs.create({ url: objectUrl });
+  // saveAs: false — goes straight to the default Downloads folder with
+  // no extra prompt, since the point is to have the file immediately
+  // ready to pick in the form's own file dialog, not to make the user
+  // choose a location for a file they're about to re-select anyway.
+  await chrome.downloads.download({ url: objectUrl, filename: fileName, saveAs: false });
 }
 
 /** Tier 3 of the autofill engine — for fields the heuristic + adapter

@@ -70,7 +70,11 @@ export default defineManifest((configEnv: ConfigEnv) => {
     },
     // storage: required by @clerk/chrome-extension unconditionally.
     // cookies: required because we use syncHost (session sync with the web app).
-    permissions: ["storage", "cookies", "activeTab", "scripting", "sidePanel"],
+    // downloads: lets the tailored-resume flow save the generated PDF
+    // straight to disk (chrome.downloads.download) instead of only
+    // opening it in a tab, so it's immediately available to pick in the
+    // ATS form's own file-upload dialog.
+    permissions: ["storage", "cookies", "activeTab", "scripting", "sidePanel", "downloads"],
     host_permissions: ["<all_urls>"],
   };
 });

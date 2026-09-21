@@ -66,12 +66,19 @@ export async function fillFieldsInMainWorld(
 
         // Poll briefly for the listbox react-select mounts once open —
         // its id is only available via aria-controls after the click's
-        // React state update has actually rendered.
+        // React state update has actually rendered. Check immediately
+        // before the first wait (the menu is often already there by the
+        // time this runs) rather than a fixed wait-then-check, and use a
+        // short interval — on real pages tested this tonight, the menu
+        // was consistently ready in well under 100ms, so a fixed
+        // 100ms-per-attempt poll was pure added latency on every single
+        // combobox on the page. Same ~1s worst-case ceiling as before,
+        // much lower typical cost.
         let listbox: HTMLElement | null = null;
-        for (let i = 0; i < 10 && !listbox; i++) {
-          await wait(100);
+        for (let i = 0; i < 20 && !listbox; i++) {
           const listboxId = el.getAttribute("aria-controls");
           listbox = listboxId ? document.getElementById(listboxId) : null;
+          if (!listbox) await wait(50);
         }
         if (!listbox) return false;
 
