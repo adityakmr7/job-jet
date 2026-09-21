@@ -27,15 +27,32 @@ function labelFor(el: HTMLElement): string | undefined {
   return text || undefined;
 }
 
+/** Anti-bot honeypot fields are a real thing on real ATS forms — found
+ *  live on a Workday application: a field named "website" (which our own
+ *  portfolio-matching heuristic would happily fill), styled to a literal
+ *  1px × 1px box. Invisible to a real applicant, but present in the DOM
+ *  for a naive script to blindly fill — exactly the signal a real ATS's
+ *  bot detection is built to catch, on a REAL application a real person
+ *  is submitting. No legitimate field a user is meant to fill is ever
+ *  this small, so excluding near-zero-size/hidden fields entirely (never
+ *  even offered to any tier — heuristic, adapter, or LLM) is a safe,
+ *  low-risk trade. */
+function isLikelyHoneypot(el: HTMLElement): boolean {
+  const style = getComputedStyle(el);
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return true;
+  const rect = el.getBoundingClientRect();
+  return rect.width <= 2 || rect.height <= 2;
+}
+
 /** Collects every plausible form field on the page for mapping/autofill. */
 export function collectFormFields(): DetectedField[] {
   const elements = Array.from(
     document.querySelectorAll<HTMLElement>("input, textarea, select")
   ).filter((el) => {
     if (el instanceof HTMLInputElement) {
-      return !["hidden", "submit", "button", "reset", "image"].includes(el.type);
+      if (["hidden", "submit", "button", "reset", "image"].includes(el.type)) return false;
     }
-    return true;
+    return !isLikelyHoneypot(el);
   });
 
   return elements.map((el) => {
