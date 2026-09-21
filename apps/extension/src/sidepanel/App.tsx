@@ -3,7 +3,7 @@ import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField, Profile } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
 import { fetchProfile, tailorResume, downloadResume, upsertApplication, mapFieldsWithLLM } from "../lib/api";
-import { runAutofillMapping } from "../lib/autofill-map";
+import { runAutofillMapping, matches, NEVER_FILL } from "../lib/autofill-map";
 import { fillFieldsInMainWorld } from "../lib/main-world-fill";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
@@ -187,17 +187,29 @@ export function App() {
    *
    *  Tiers 1+2 (heuristic + known-site adapter, both client-side and
    *  instant) run first via runAutofillMapping. Whatever's left over —
-   *  fields neither recognized by wording nor by a per-site adapter, and
-   *  that aren't file inputs (never scriptable) — goes to tier 3: a
-   *  backend call that asks an LLM to match them against a closed set of
-   *  known profile attributes, backed by a crowdsourced per-domain cache
-   *  (see apps/web's /api/autofill/map) so the same field wording on the
-   *  same ATS only ever costs one real model call across ALL users. */
+   *  fields neither recognized by wording nor by a per-site adapter, that
+   *  aren't file inputs (never scriptable), and aren't voluntary EEO
+   *  self-identification fields — goes to tier 3: a backend call that
+   *  asks an LLM to match them against a closed set of known profile
+   *  attributes, backed by a crowdsourced per-domain cache (see apps/web's
+   *  /api/autofill/map) so the same field wording on the same ATS only
+   *  ever costs one real model call across ALL users.
+   *
+   *  The NEVER_FILL exclusion is applied here too, not just inside tier
+   *  1's own mapProfileToFields — safe by construction, not by accident:
+   *  today tier 3's allow-list happens not to include any EEO category,
+   *  so it would return null for these anyway, but that's a property of
+   *  the allow-list's current contents, not an explicit guarantee. This
+   *  makes the exclusion hold regardless of what the allow-list contains
+   *  later, and saves a wasted round of tokens asking about fields
+   *  tier 1 already decided are never appropriate to guess-fill. */
   async function fillFields(fieldsToFill: DetectedField[], profile: Profile, hostname: string, auto: boolean) {
     const mapped = runAutofillMapping(fieldsToFill, profile, hostname);
 
     const claimed = new Set(mapped.map((m) => m.selector));
-    const unresolved = fieldsToFill.filter((f) => !claimed.has(f.selector) && f.type !== "file");
+    const unresolved = fieldsToFill.filter(
+      (f) => !claimed.has(f.selector) && f.type !== "file" && !matches(f, NEVER_FILL)
+    );
     const llmMapped = unresolved.length > 0 ? await mapFieldsWithLLM(getToken, hostname, unresolved) : [];
 
     const allMapped = [...mapped, ...llmMapped];

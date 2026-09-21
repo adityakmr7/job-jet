@@ -29,7 +29,7 @@ export function matches(field: DetectedField, ...patterns: RegExp[]): boolean {
 }
 
 /** Explicitly excluded from autofill even if a pattern would otherwise match. */
-const NEVER_FILL = /pronoun|veteran|disability|ethnicity|\bgender\b|race/i;
+export const NEVER_FILL = /pronoun|veteran|disability|ethnicity|\bgender\b|race/i;
 
 export function mapProfileToFields(
   fields: DetectedField[],
@@ -49,7 +49,10 @@ export function mapProfileToFields(
 
     let value: string | undefined;
 
-    if (matches(field, /full.?name/i) && !matches(field, /first|last/i)) {
+    // "Legal Name" is Ashby's actual label for this field on a real,
+    // live posting — found by testing, not assumed; "full name" alone
+    // missed it entirely.
+    if (matches(field, /full.?name|legal.?name/i) && !matches(field, /first|last/i)) {
       value = profile.fullName;
     } else if (matches(field, /first.?name/i)) {
       value = first;
