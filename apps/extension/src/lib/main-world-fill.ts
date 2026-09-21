@@ -47,6 +47,13 @@
  * the menu, then the options render fully in the DOM (no typing/filtering
  * required, even for a 72-option list) and can be matched by their text
  * and clicked the same way.
+ *
+ * A third wrinkle, found testing a different real ATS (SmartRecruiters):
+ * its actual fields live entirely inside open shadow roots, which plain
+ * `document.querySelector` can't see across — see dom-deep.ts for the
+ * full story. `queryDeep` below is that same logic duplicated inline
+ * (self-contained-injected-function constraint, same reason the rest of
+ * this file's logic is duplicated rather than imported).
  */
 export async function fillFieldsInMainWorld(
   tabId: number,
@@ -57,6 +64,20 @@ export async function fillFieldsInMainWorld(
     world: "MAIN",
     func: async (valuesArg: Record<string, string>) => {
       const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      function queryDeep(root: ParentNode, selector: string): HTMLElement | null {
+        const direct = root.querySelector<HTMLElement>(selector);
+        if (direct) return direct;
+        const all = root.querySelectorAll("*");
+        for (const el of Array.from(all)) {
+          const shadow = (el as Element).shadowRoot;
+          if (shadow) {
+            const found = queryDeep(shadow, selector);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
 
       async function setComboboxValue(el: HTMLElement, value: string): Promise<boolean> {
         el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -77,7 +98,13 @@ export async function fillFieldsInMainWorld(
         let listbox: HTMLElement | null = null;
         for (let i = 0; i < 20 && !listbox; i++) {
           const listboxId = el.getAttribute("aria-controls");
-          listbox = listboxId ? document.getElementById(listboxId) : null;
+          // document.getElementById first (fast, common — most menus
+          // portal out to document.body to escape overflow/stacking
+          // context, shadow DOM or not); queryDeep as a fallback for a
+          // menu that stayed inside its component's own shadow root.
+          listbox = listboxId
+            ? document.getElementById(listboxId) ?? queryDeep(document, `#${CSS.escape(listboxId)}`)
+            : null;
           if (!listbox) await wait(50);
         }
         if (!listbox) return false;
@@ -105,7 +132,7 @@ export async function fillFieldsInMainWorld(
       }
 
       async function setFieldValue(selector: string, value: string): Promise<boolean> {
-        const el = document.querySelector<HTMLElement>(selector);
+        const el = queryDeep(document, selector);
         if (!el) return false;
 
         if (el.getAttribute("role") === "combobox") {

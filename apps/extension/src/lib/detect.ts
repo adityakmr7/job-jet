@@ -8,6 +8,8 @@
  * almost all client-side routed).
  */
 
+import { queryAllDeep } from "./dom-deep";
+
 // Known ATS hostnames — fast path, skips scoring entirely.
 const KNOWN_ATS_HOSTS = [
   "greenhouse.io",
@@ -101,7 +103,10 @@ function scoreFieldKeywords(text: string): number {
 }
 
 function collectFormSignal(): { fieldHits: number; textInputCount: number; hasFileUpload: boolean } {
-  const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
+  // queryAllDeep, not a plain querySelectorAll — a real ATS found during
+  // testing (SmartRecruiters) renders its actual fields entirely inside
+  // open shadow roots, invisible to a top-level query. See dom-deep.ts.
+  const inputs = queryAllDeep(document, "input, textarea, select");
   const textInputCount = inputs.filter(
     (el) => el.tagName !== "INPUT" || !["hidden", "submit", "button", "checkbox", "radio"].includes((el as HTMLInputElement).type)
   ).length;
@@ -110,7 +115,8 @@ function collectFormSignal(): { fieldHits: number; textInputCount: number; hasFi
   const labelText = inputs
     .map((el) => {
       const id = el.getAttribute("id");
-      const associatedLabel = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const root = el.getRootNode() as Document | ShadowRoot;
+      const associatedLabel = id ? root.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
       return [
         el.getAttribute("name"),
         el.getAttribute("id"),

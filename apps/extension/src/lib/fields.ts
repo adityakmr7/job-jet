@@ -1,4 +1,5 @@
 import type { DetectedField } from "@job-jet/shared";
+import { queryAllDeep } from "./dom-deep";
 
 let counter = 0;
 
@@ -14,7 +15,13 @@ function ensureSelector(el: HTMLElement): string {
 function labelFor(el: HTMLElement): string | undefined {
   const id = el.getAttribute("id");
   if (id) {
-    const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+    // Scoped to the element's own root (its shadow root if it's in one,
+    // the document otherwise) via getRootNode() — a label[for] pairing
+    // lives in the same root as its input in every real component found
+    // so far, and a plain top-level document.querySelector wouldn't find
+    // it if that root is a shadow root.
+    const root = el.getRootNode() as Document | ShadowRoot;
+    const label = root.querySelector(`label[for="${CSS.escape(id)}"]`);
     if (label?.textContent) return label.textContent.trim();
   }
   const closestLabel = el.closest("label");
@@ -44,11 +51,11 @@ function isLikelyHoneypot(el: HTMLElement): boolean {
   return rect.width <= 2 || rect.height <= 2;
 }
 
-/** Collects every plausible form field on the page for mapping/autofill. */
+/** Collects every plausible form field on the page for mapping/autofill —
+ *  including ones nested inside open shadow roots (queryAllDeep), see
+ *  dom-deep.ts for why that's not optional. */
 export function collectFormFields(): DetectedField[] {
-  const elements = Array.from(
-    document.querySelectorAll<HTMLElement>("input, textarea, select")
-  ).filter((el) => {
+  const elements = (queryAllDeep(document, "input, textarea, select") as HTMLElement[]).filter((el) => {
     if (el instanceof HTMLInputElement) {
       if (["hidden", "submit", "button", "reset", "image"].includes(el.type)) return false;
     }
