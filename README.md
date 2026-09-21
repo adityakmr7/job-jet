@@ -56,11 +56,13 @@ writeup, including what got found by inspecting two real live job postings:
    see `src/lib/api.ts` and the backend's `src/lib/cors.ts`). Deliberately
    never fills voluntary EEO self-identification fields (gender, ethnicity,
    veteran/disability status, pronouns) — those stay opt-in and manual.
-2. **Known-site adapter (done for Greenhouse + Lever)** —
+2. **Known-site adapter (done for Greenhouse, Lever, Ashby)** —
    `apps/extension/src/lib/adapters/` targets each platform's stable field
    id/name directly rather than guessing from label text. Verified against
-   real captured field data from live postings on both platforms
-   (`npm run verify:adapters --workspace=apps/extension`).
+   real captured field data from live postings on all three platforms
+   (`npm run verify:adapters --workspace=apps/extension`). Workday has no
+   adapter yet — its stable fields are behind an account-creation step not
+   verified live; see `docs/ARCHITECTURE.md`.
 3. **LLM fallback** (done) — `apps/web/src/app/api/autofill/map`. Fields
    tiers 1–2 miss get matched against a closed set of known profile
    attributes (never a raw value — see `apps/web/src/lib/field-paths.ts`),

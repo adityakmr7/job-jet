@@ -93,7 +93,7 @@ or override it. Clicking it opens `chrome.sidePanel`.
 ```
 1. Heuristic (built)       — client-side keyword matching, no network cost
                               beyond fetching the profile itself.
-2. Known-site adapter (built for Greenhouse + Lever) — targets each
+2. Known-site adapter (built for Greenhouse, Lever, Ashby) — targets each
                               platform's documented, stable field ids/names
                               directly instead of guessing from label text.
 3. LLM fallback (built)    — whatever tiers 1–2 miss, sent to the backend,
@@ -111,31 +111,66 @@ profile's `links[]` by label/URL), location, work authorization,
 sponsorship, most recent job's company/title, most recent school/degree.
 
 **Tier 2** (`apps/extension/src/lib/adapters/`) — built after inspecting
-two real, live job postings (not from memory): a Greenhouse posting at
-`job-boards.greenhouse.io/figma/jobs/...` and a Lever posting at
-`jobs.lever.co/palantir/.../apply`. Both platforms use plain-English labels
-for their standard fields, so tier 1 already covers a fair amount — tier
-2's actual value is precision: it targets each platform's stable element
-`id` (Greenhouse: `first_name`, `last_name`, `email`, `phone`,
-`candidate-location`) or `name` attribute (Lever: `name`, `email`, `phone`,
-`location`, `org`, `urls[LinkedIn]`, `urls[GitHub]`, `urls[Portfolio]`)
-directly, guaranteed identical across every company hosted on that
-platform, rather than fuzzy-matching label text. `runAutofillMapping()`
-composes the two tiers: the adapter claims what it recognizes, the
-heuristic only runs on the fields left over (a field is never filled twice
-via two different selectors aimed at the same element).
+real, live job postings (not from memory): a Greenhouse posting at
+`job-boards.greenhouse.io/figma/jobs/...`, a Lever posting at
+`jobs.lever.co/palantir/.../apply`, and an Ashby posting at
+`jobs.ashbyhq.com/fieldguide/.../application`. These platforms use
+plain-English labels for their standard fields, so tier 1 already covers
+a fair amount — tier 2's actual value is precision: it targets each
+platform's stable element `id` (Greenhouse: `first_name`, `last_name`,
+`email`, `phone`, `candidate-location`; Ashby: a `_systemfield_*` id
+prefix — `_systemfield_name`, `_systemfield_email`, `_systemfield_resume`)
+or `name` attribute (Lever: `name`, `email`, `phone`, `location`, `org`,
+`urls[LinkedIn]`, `urls[GitHub]`, `urls[Portfolio]`) directly, guaranteed
+identical across every company hosted on that platform, rather than
+fuzzy-matching label text. `runAutofillMapping()` composes the two tiers:
+the adapter claims what it recognizes, the heuristic only runs on the
+fields left over (a field is never filled twice via two different
+selectors aimed at the same element).
+
+Ashby's adapter is narrower in practice than the other two: its only
+truly id-stable fields are name/email/resume, and name/email are also
+already reachable by tier 1's type/label matching post the "Legal Name"
+fix below — so the adapter's edge there is precision over an already-
+working heuristic path, not reaching something otherwise unreachable.
 
 Deliberately **not** covered by the adapters: each platform's per-job
 custom questions (Greenhouse's `question_<id>`, Lever's
-`cards[<uuid>][fieldN]`) — their ids/names aren't stable across postings.
-Their *labels* often are, though ("LinkedIn Profile", "Are you legally
-authorized to work in the US?") — that's tier 3's job.
+`cards[<uuid>][fieldN]`, Ashby's random-UUID ids) — their ids/names
+aren't stable across postings. Their *labels* often are, though
+("LinkedIn Profile", "Are you legally authorized to work in the US?")
+— that's tier 3's job.
 
-Verified against real captured field data from both live postings
-(`apps/extension/scripts/verify-adapters.ts`, `npm run verify:adapters`):
-correctly fills 7/11 Greenhouse fields and 8/10 Lever fields, correctly
-skipping file inputs, EEO fields, and genuinely open-ended questions in
-both cases.
+**Workday has no adapter** — its only field verified live tonight
+(`data-automation-id="email"`, plus `password`/`verifyPassword`/
+`createAccountCheckbox`/a honeypot named `beecatcher`) is on the
+account-creation step every "Apply Manually" flow requires first; the
+real application fields (name, phone, address, work history) are behind
+that signup wall and weren't inspected — creating a throwaway account to
+see past it wasn't done unprompted. Building an adapter from Workday's
+generally-known `data-automation-id` conventions instead of a live
+capture would be a real departure from how every other adapter here was
+built, so it was deliberately skipped rather than guessed at.
+
+**A real, previously-unknown limitation found via this same testing
+round, unrelated to any of the above**: SmartRecruiters' "Easy Apply"
+widget renders its actual fields entirely inside **open shadow DOM**
+roots (37 shadow roots on one page) — not an iframe, so it isn't
+something `frameId`/`all_frames` scoping touches at all. Plain
+`document.querySelector`/`querySelectorAll` don't cross shadow
+boundaries, so field detection wasn't reporting "0 matched", it
+genuinely couldn't see 14 real, visible fields existed. Fixed with
+`apps/extension/src/lib/dom-deep.ts` (`queryDeep`/`queryAllDeep`,
+recursing into every open shadow root), wired into `detect.ts`,
+`fields.ts`, and `main-world-fill.ts`. Closed shadow roots remain
+unreachable by design — no technique gets past genuine encapsulation —
+but every real site found so far uses open mode.
+
+Verified against real captured field data from all three adapter-covered
+live postings (`apps/extension/scripts/verify-adapters.ts`,
+`npm run verify:adapters`): correctly fills 7/11 Greenhouse fields, 8/10
+Lever fields, and 5/9 Ashby fields — correctly skipping file inputs, EEO
+fields, and genuinely open-ended questions in all three cases.
 
 **Tier 3** (`apps/extension/src/lib/api.ts`'s `mapFieldsWithLLM`,
 `apps/web/src/app/api/autofill/map/route.ts`) runs only on whatever tiers
@@ -473,12 +508,21 @@ existed).
 
 ## Known gaps / next up
 
-- Known-site adapters (tier 2) built for Greenhouse and Lever only; Workday,
-  Ashby, iCIMS, SmartRecruiters are on the known-ATS hostname list for
+- Known-site adapters (tier 2) built for Greenhouse, Lever, and Ashby;
+  Workday, iCIMS, SmartRecruiters are on the known-ATS hostname list for
   detection but don't have adapters yet — tier 3 (LLM fallback, now built)
   is what covers them in the meantime, at the cost of a model call on
   first sight of each field wording per domain instead of an instant,
-  free, exact match.
+  free, exact match. Workday specifically needs a real signed-in test
+  account before an adapter can be built the same verified-live way the
+  others were — see the tier-2 section above.
+- Skill-matching for per-job yes/no technology questions ("Do you have
+  experience with Docker/Kubernetes?") — found live on a real Workday
+  posting, not built. Distinct from tier 3's allow-list (which answers
+  fixed facts about the candidate): this would check whether keywords
+  extracted from the question text appear in the user's actual saved
+  skills list — safe (a factual check, no fabrication risk) but a
+  genuinely new capability, not a tweak to the existing allow-list.
 - Tier 3's allow-list (`field-paths.ts`) covers ~16 scalar profile
   attributes — the same ones tiers 1/2 already target. It doesn't reach
   into `additionalQuestions` (free-form Q&A the profile schema already has

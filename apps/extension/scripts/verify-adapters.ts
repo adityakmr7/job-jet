@@ -1,12 +1,13 @@
 /**
  * Ad-hoc verification: runs the real adapter + heuristic composition
- * against DetectedField data captured from two real, live job postings
- * (not synthetic test fixtures) — a Greenhouse posting at
- * job-boards.greenhouse.io/figma/jobs/6142506004 and a Lever posting at
- * jobs.lever.co/palantir/.../apply — to confirm the adapters actually
- * target the right elements and the heuristic correctly picks up whatever
- * the adapter leaves for it (custom per-job questions), before relying on
- * a full browser reload to see it work.
+ * against DetectedField data captured from real, live job postings (not
+ * synthetic test fixtures) — a Greenhouse posting at
+ * job-boards.greenhouse.io/figma/jobs/6142506004, a Lever posting at
+ * jobs.lever.co/palantir/.../apply, and an Ashby posting at
+ * jobs.ashbyhq.com/fieldguide/.../application — to confirm the adapters
+ * actually target the right elements and the heuristic correctly picks up
+ * whatever the adapter leaves for it (custom per-job questions), before
+ * relying on a full browser reload to see it work.
  *
  * Not a permanent test suite (no test runner wired up yet) — run directly
  * with `npx tsx scripts/verify-adapters.ts`.
@@ -75,6 +76,24 @@ const leverFields: DetectedField[] = [
   },
 ];
 
+// Field data as actually captured from jobs.ashbyhq.com/fieldguide/.../application
+const ashbyFields: DetectedField[] = [
+  { selector: "sel-0", type: "file", id: "", label: undefined },
+  { selector: "sel-1", type: "text", id: "_systemfield_name", label: "Legal Name" },
+  { selector: "sel-2", type: "text", id: "d4ac44ed-9953-4bd1-a363-a7ac6f3f652d", label: "Preferred Name" },
+  { selector: "sel-3", type: "text", id: "1fe540c7-92e1-4528-b49a-b9d20d156b30", label: "Preferred Pronouns" },
+  { selector: "sel-4", type: "email", id: "_systemfield_email", label: "Email" },
+  { selector: "sel-5", type: "tel", id: "90fa4e83-943d-46bc-8e1f-e05186d34210", label: "Phone Number" },
+  { selector: "sel-6", type: "file", id: "_systemfield_resume", label: "Resume" },
+  { selector: "sel-7", type: "text", id: "6aaa8c0e-4f0f-46dd-b9aa-000000000001", label: "LinkedIn Profile" },
+  {
+    selector: "sel-8",
+    type: "text",
+    id: "c3256962-823c-4185-9def-000000000002",
+    label: "Portfolio/Personal Website",
+  },
+];
+
 function report(name: string, fields: DetectedField[], hostname: string) {
   const results = runAutofillMapping(fields, profile, hostname);
   const byField = new Map(results.map((r) => [r.selector, r.value]));
@@ -87,3 +106,4 @@ function report(name: string, fields: DetectedField[], hostname: string) {
 
 report("Greenhouse (Figma posting)", greenhouseFields, "job-boards.greenhouse.io");
 report("Lever (Palantir posting)", leverFields, "jobs.lever.co");
+report("Ashby (Fieldguide posting)", ashbyFields, "jobs.ashbyhq.com");
