@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { ProfileSchema } from "@job-jet/shared";
 import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/get-or-create-user";
 import { corsHeaders } from "@/lib/cors";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
-
-const ProfileInputSchema = ProfileSchema.omit({ id: true, userId: true, updatedAt: true });
+import { ProfileInputSchema } from "@/lib/validation";
 
 // A full profile (many roles, bullets, links) is comfortably under this.
 const MAX_PROFILE_BYTES = 200 * 1024;
