@@ -47,12 +47,10 @@ export type FieldMapping = z.infer<typeof FieldMappingSchema>;
  * label is what makes the cache actually hit on the second posting, not
  * just the second visit to the exact same one.
  *
- * Plain function, not a zod schema — safe to import from either app
- * regardless of which zod major version that app is on (only the schema
- * *objects* in this file are version-sensitive at the `generateObject`/
- * `safeParse` call site; see apps/web's resume-parse.ts and
- * resume-tailor.ts for why those keep local schema duplicates instead of
- * importing the ones above directly).
+ * Plain function, not a zod schema — safe to import from either app.
+ * (All workspaces use zod 4; apps/web's resume-parse.ts and
+ * resume-tailor.ts still keep their own AI-facing schemas because those
+ * intentionally differ from the canonical shapes above.)
  */
 export function computeFieldSignature(
   field: Pick<DetectedField, "label" | "name" | "id" | "placeholder" | "type">

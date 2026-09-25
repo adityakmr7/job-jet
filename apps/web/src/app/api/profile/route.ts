@@ -5,8 +5,12 @@ import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/get-or-create-user";
 import { corsHeaders } from "@/lib/cors";
+import { readJsonBody, withErrorHandling } from "@/lib/http";
 
 const ProfileInputSchema = ProfileSchema.omit({ id: true, userId: true, updatedAt: true });
+
+// A full profile (many roles, bullets, links) is comfortably under this.
+const MAX_PROFILE_BYTES = 200 * 1024;
 
 // Preflight for the extension's cross-origin (chrome-extension://) requests.
 // Handled here rather than only in proxy.ts because auth.protect() must not
@@ -16,7 +20,7 @@ export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
 }
 
-export async function GET(req: Request) {
+export const GET = withErrorHandling("api/profile GET", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
@@ -25,14 +29,14 @@ export async function GET(req: Request) {
   const [profile] = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1);
 
   return NextResponse.json({ profile: profile ?? null }, { headers });
-}
+});
 
-export async function PUT(req: Request) {
+export const PUT = withErrorHandling("api/profile PUT", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
 
-  const body = await req.json().catch(() => null);
+  const body = await readJsonBody(req, MAX_PROFILE_BYTES);
   const parsed = ProfileInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -52,4 +56,4 @@ export async function PUT(req: Request) {
     .returning();
 
   return NextResponse.json({ profile: saved }, { headers });
-}
+});

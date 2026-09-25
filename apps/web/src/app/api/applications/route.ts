@@ -4,12 +4,15 @@ import { getDb } from "@/db";
 import { applications } from "@/db/schema";
 import { getOrCreateUser } from "@/lib/get-or-create-user";
 import { corsHeaders } from "@/lib/cors";
+import { readJsonBody, withErrorHandling } from "@/lib/http";
+import { ApplicationUpsertSchema, validationErrorBody } from "@/lib/validation";
+import { userOwnsResume } from "@/lib/ownership";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
 }
 
-export async function GET(req: Request) {
+export const GET = withErrorHandling("api/applications GET", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
@@ -22,7 +25,7 @@ export async function GET(req: Request) {
     .orderBy(desc(applications.updatedAt));
 
   return NextResponse.json({ applications: rows }, { headers });
-}
+});
 
 /**
  * Upserts by (userId, url) — called by the extension whenever the user
@@ -43,19 +46,22 @@ export async function GET(req: Request) {
  * UTM params on those same URLs are a related, unfixed risk — noted, not
  * solved, since a real fix needs knowing which params are noise per site).
  */
-export async function POST(req: Request) {
+export const POST = withErrorHandling("api/applications POST", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
 
-  const body = await req.json().catch(() => null);
-  const rawUrl = typeof body?.url === "string" ? body.url : "";
-  if (!rawUrl) return NextResponse.json({ error: "Missing url" }, { status: 400, headers });
+  const parsedBody = ApplicationUpsertSchema.safeParse(await readJsonBody(req));
+  if (!parsedBody.success) {
+    return NextResponse.json(validationErrorBody(parsedBody.error), { status: 400, headers });
+  }
+  const { url: rawUrl, ...fields } = parsedBody.data;
 
   let url: string;
   let domain: string;
   try {
     const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("bad protocol");
     parsed.hash = "";
     url = parsed.toString();
     domain = parsed.hostname;
@@ -63,9 +69,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid url" }, { status: 400, headers });
   }
 
+  if (fields.resumeId && !(await userOwnsResume(user.id, fields.resumeId))) {
+    return NextResponse.json({ error: "Resume not found" }, { status: 400, headers });
+  }
+
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  for (const key of ["company", "jobTitle", "jobDescription", "resumeId", "status"] as const) {
-    if (body?.[key] !== undefined) patch[key] = body[key];
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) patch[key] = value;
   }
 
   const db = getDb();
@@ -79,4 +89,4 @@ export async function POST(req: Request) {
     .returning();
 
   return NextResponse.json({ application: saved }, { headers });
-}
+});

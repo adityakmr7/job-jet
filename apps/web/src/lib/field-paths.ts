@@ -37,10 +37,13 @@ export const ALLOWED_PROFILE_FIELD_PATHS = [
 export type ProfileFieldPath = (typeof ALLOWED_PROFILE_FIELD_PATHS)[number];
 
 function findLink(profile: Profile, ...keywords: string[]): string | undefined {
-  const link = profile.links.find((l) =>
-    keywords.some((kw) => l.label.toLowerCase().includes(kw) || l.url.toLowerCase().includes(kw))
-  );
-  return link?.url;
+  // Keywords are in priority order: findLink(p, "portfolio", "github")
+  // must return the portfolio link even if a GitHub link is listed first.
+  for (const kw of keywords) {
+    const link = profile.links.find((l) => l.label.toLowerCase().includes(kw) || l.url.toLowerCase().includes(kw));
+    if (link) return link.url;
+  }
+  return undefined;
 }
 
 function yesNo(value: boolean | undefined): string | undefined {

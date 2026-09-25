@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        # apps/web runs `next typegen` before tsc
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build extension (production mode, placeholder config)
+        env:
+          # Placeholders only — not real credentials. The key is
+          # pk_live_ + base64("clerk.example.com$") so it passes the
+          # build-time format check in apps/extension/env.config.ts.
+          VITE_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuZXhhbXBsZS5jb20k
+          VITE_CLERK_SYNC_HOST: https://jobjet.example.com
+        run: npm run build:extension
+
+      - name: Build web
+        # Runtime secrets are read lazily, so the build needs no real env.
+        run: npm run build:web

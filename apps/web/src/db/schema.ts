@@ -3,12 +3,12 @@ import {
   text,
   timestamp,
   jsonb,
-  boolean,
   integer,
   real,
   uuid,
   pgEnum,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type {
   Link,
@@ -124,4 +124,17 @@ export const fieldMappings = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [uniqueIndex("field_mappings_domain_signature_idx").on(table.domain, table.fieldSignature)]
+);
+
+// Per-user fixed-window counters for rate-limiting the AI endpoints (see
+// src/lib/rate-limit.ts). key = "<bucket>:<userId>". Old windows are
+// pruned opportunistically; rows are tiny.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.key, table.windowStart] })]
 );

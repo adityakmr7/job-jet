@@ -3,19 +3,17 @@ import { z } from "zod";
 import { getModel } from "./ai";
 import { ALLOWED_PROFILE_FIELD_PATHS, PROFILE_FIELD_PATH_DESCRIPTIONS } from "./field-paths";
 
-/** Local zod (v4, apps/web's own dependency) schema for the LLM call —
- *  deliberately not importing @job-jet/shared's DetectedFieldSchema/
- *  FieldMappingSchema into this generateObject call; those are zod v3 and
- *  mixing versions inside an AI SDK schema breaks its structural inference
- *  (see resume-parse.ts / resume-tailor.ts, which hit this first). */
-const FieldForPromptSchema = z.object({
-  index: z.number(),
-  label: z.string().optional(),
-  name: z.string().optional(),
-  placeholder: z.string().optional(),
-  type: z.string(),
-  options: z.array(z.string()).optional(),
-});
+/** What the LLM prompt sees for each field (an index instead of a
+ *  selector, no id) — intentionally narrower than @job-jet/shared's
+ *  DetectedField. */
+export type FieldForPrompt = {
+  index: number;
+  label?: string;
+  name?: string;
+  placeholder?: string;
+  type: string;
+  options?: string[];
+};
 
 const MatchResultSchema = z.object({
   matches: z.array(
@@ -28,8 +26,6 @@ const MatchResultSchema = z.object({
     })
   ),
 });
-
-export type FieldForPrompt = z.infer<typeof FieldForPromptSchema>;
 
 /**
  * Tier 3 of the autofill engine: for fields the heuristic + adapter tiers

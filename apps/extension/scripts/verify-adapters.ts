@@ -9,8 +9,9 @@
  * whatever the adapter leaves for it (custom per-job questions), before
  * relying on a full browser reload to see it work.
  *
- * Not a permanent test suite (no test runner wired up yet) — run directly
- * with `npx tsx scripts/verify-adapters.ts`.
+ * Human-readable report, run directly with `npx tsx scripts/verify-adapters.ts`.
+ * The same captured data is asserted automatically in
+ * tests/autofill-map.test.ts and tests/adapters.test.ts (`npm test`).
  */
 import type { DetectedField, Profile } from "@job-jet/shared";
 import { runAutofillMapping } from "../src/lib/autofill-map";

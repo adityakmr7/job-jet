@@ -4,13 +4,10 @@ import type { ResumeContent } from "@job-jet/shared";
 import { getModel } from "./ai";
 
 // Mirrors @job-jet/shared's Profile/Resume shape (minus `id` fields — see
-// below), but is its own zod schema rather than reusing shared's directly.
-// `ai`'s generateObject is typed against zod's own generics; shared's
-// schemas are built against a different major version of zod than this
-// app resolves (npm gives each package the zod major it declares), and
-// mixing the two blows up TS's structural comparison. Small duplication,
-// but keeps both sides on a zod version that actually matches what
-// consumes it.
+// below), but is its own zod schema rather than reusing shared's directly:
+// the model must not invent `id`s, and this is the exact shape handed to
+// `generateObject`. (Historically shared was also on a different zod
+// major; all workspaces are now on zod 4.)
 const AiExtractionSchema = z.object({
   fullName: z.string(),
   email: z.email(),

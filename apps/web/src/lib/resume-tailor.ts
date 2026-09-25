@@ -73,8 +73,15 @@ export async function tailorResume(profile: ResumeContent, jobDescription: strin
   });
 
   const knownSkillNames = new Set(skillNames.map((n) => n.toLowerCase()));
-  const orderedKnown = object.skillOrder.filter((name) => knownSkillNames.has(name.toLowerCase()));
-  const mentioned = new Set(orderedKnown.map((n) => n.toLowerCase()));
+  const mentioned = new Set<string>();
+  // Keep only the user's own skills, once each (the model may repeat one
+  // with different casing).
+  const orderedKnown = object.skillOrder.filter((name) => {
+    const key = name.toLowerCase();
+    if (!knownSkillNames.has(key) || mentioned.has(key)) return false;
+    mentioned.add(key);
+    return true;
+  });
   // Anything the model dropped still gets appended — reordering/trimming
   // for relevance is fine, silently losing a skill the user listed isn't.
   const remaining = profile.skills.filter((s) => !mentioned.has(s.name.toLowerCase()));
