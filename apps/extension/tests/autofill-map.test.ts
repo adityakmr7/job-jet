@@ -49,7 +49,8 @@ describe("mapProfileToFields (heuristic tier)", () => {
       c: "priya.sharma@example.com",
       d: "+1 415 555 0192",
       e: "Priya Sharma",
-      f: "San Francisco, CA",
+      // Bug 5 (live Greenhouse run): a "City" field gets only the city.
+      f: "San Francisco",
     });
   });
 
