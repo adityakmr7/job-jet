@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserRound, KanbanSquare, FileText } from "lucide-react";
+import { UserRound, KanbanSquare, FileText, Settings } from "lucide-react";
 
 type NavItem = { label: string; icon: typeof UserRound; href: string; soon?: boolean };
 
 const NAV: NavItem[] = [
   { label: "Profile", icon: UserRound, href: "/dashboard" },
   { label: "Applications", icon: KanbanSquare, href: "/dashboard/applications" },
+  { label: "Account", icon: Settings, href: "/dashboard/account" },
   { label: "Tailored resumes", icon: FileText, href: "", soon: true },
 ];
 

@@ -1,7 +1,8 @@
-import { Show, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Logo } from "./Logo";
 import { ButtonLink } from "./ui/button";
+import { Show } from "./auth/Show";
+import { UserMenu } from "./auth/UserMenu";
 
 const NAV = [
   { href: "/#features", label: "Features" },
@@ -41,7 +42,7 @@ export function SiteHeader() {
             <ButtonLink href="/dashboard" variant="secondary" size="sm" className="h-9 px-4">
               Dashboard
             </ButtonLink>
-            <UserButton />
+            <UserMenu />
           </Show>
         </div>
       </div>

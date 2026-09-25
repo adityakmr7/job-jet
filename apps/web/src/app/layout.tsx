@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,19 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <ClerkProvider
-          appearance={{
-            variables: {
-              colorPrimary: "#3346e0",
-              colorForeground: "#0e1330",
-              colorMutedForeground: "#555c78",
-              borderRadius: "0.75rem",
-              fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
-            },
-          }}
-        >
-          {children}
-        </ClerkProvider>
+        {children}
       </body>
     </html>
   );
