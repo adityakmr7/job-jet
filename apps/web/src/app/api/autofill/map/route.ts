@@ -7,25 +7,18 @@ import { getOrCreateUser } from "@/lib/get-or-create-user";
 import { corsHeaders } from "@/lib/cors";
 import { resolveProfileFieldPath } from "@/lib/field-paths";
 import { matchFieldsToProfilePaths, type FieldForPrompt } from "@/lib/field-mapping-llm";
+import { readJsonBody, withErrorHandling } from "@/lib/http";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import {
+  AutofillMapRequestSchema,
+  isMappingCompatible,
+  normalizeSiteKey,
+  validationErrorBody,
+  type IncomingField,
+} from "@/lib/validation";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
-}
-
-type IncomingField = {
-  selector: string;
-  label?: string;
-  name?: string;
-  id?: string;
-  placeholder?: string;
-  type: string;
-  options?: string[];
-};
-
-function isIncomingField(v: unknown): v is IncomingField {
-  if (!v || typeof v !== "object") return false;
-  const f = v as Record<string, unknown>;
-  return typeof f.selector === "string" && typeof f.type === "string";
 }
 
 /**
@@ -41,17 +34,25 @@ function isIncomingField(v: unknown): v is IncomingField {
  * Safety: the model never sees or returns an actual value — see
  * field-paths.ts. It only picks a key from a fixed allow-list; the real
  * value is resolved from THIS user's own profile, in code, after the
- * model call returns. A hallucinated key just fails to resolve.
+ * model call returns. A hallucinated key just fails to resolve, and every
+ * mapping (cached or fresh) must also pass isMappingCompatible against the
+ * submitted field's type before it's used or cached.
+ *
+ * Abuse limits: the request body is size-capped and schema-validated, the
+ * site key is normalized to a validated hostname, and LLM calls are
+ * rate-limited per user (cache hits are not — they cost no model call).
  */
-export async function POST(req: Request) {
+export const POST = withErrorHandling("api/autofill/map POST", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
 
-  const body = await req.json().catch(() => null);
-  const domain = typeof body?.domain === "string" ? body.domain : "";
-  const rawFields = Array.isArray(body?.fields) ? body.fields : [];
-  const fields = rawFields.filter(isIncomingField) as IncomingField[];
+  const parsed = AutofillMapRequestSchema.safeParse(await readJsonBody(req));
+  if (!parsed.success) {
+    return NextResponse.json(validationErrorBody(parsed.error), { status: 400, headers });
+  }
+  const domain = normalizeSiteKey(parsed.data.domain);
+  const fields = parsed.data.fields;
   if (!domain || fields.length === 0) {
     return NextResponse.json({ mappings: [] }, { headers });
   }
@@ -98,10 +99,14 @@ export async function POST(req: Request) {
 
   for (const w of withSignature) {
     const hit = cacheBySignature.get(w.signature);
-    if (hit) {
+    if (hit && isMappingCompatible(hit.profileFieldPath, w.field)) {
       cacheHitSignatures.push(w.signature);
       const value = resolveProfileFieldPath(profile, hit.profileFieldPath);
       if (value) results.push({ selector: w.field.selector, value });
+    } else if (hit) {
+      // Invalid/incompatible cached decision — ignore it for this field
+      // rather than re-asking the model (it'd likely answer the same).
+      continue;
     } else {
       uncached.push(w);
     }
@@ -125,6 +130,14 @@ export async function POST(req: Request) {
     );
   }
 
+  const rateLimited =
+    uncached.length > 0 ? await enforceRateLimit(RATE_LIMITS.autofillMap, user.id, headers) : null;
+  if (rateLimited) {
+    // Best-effort tier: over the limit just means no LLM matching this
+    // time; cached mappings above are still returned.
+    return NextResponse.json({ mappings: results, rateLimited: true }, { headers });
+  }
+
   if (uncached.length > 0) {
     const forPrompt: FieldForPrompt[] = uncached.map((u, index) => ({
       index,
@@ -141,7 +154,9 @@ export async function POST(req: Request) {
 
       for (const m of matches) {
         if (!m.profileFieldPath) continue;
-        const { field, signature } = uncached[m.index];
+        const entry = uncached[m.index];
+        if (!entry || !isMappingCompatible(m.profileFieldPath, entry.field)) continue;
+        const { field, signature } = entry;
         newCacheRows.push({ domain, fieldSignature: signature, profileFieldPath: m.profileFieldPath });
 
         const value = resolveProfileFieldPath(profile, m.profileFieldPath);
@@ -181,4 +196,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ mappings: results }, { headers });
-}
+});
