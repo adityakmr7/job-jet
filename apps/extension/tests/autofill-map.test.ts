@@ -97,17 +97,20 @@ describe("mapProfileToFields (heuristic tier)", () => {
     expect(mapProfileToFields([field({ selector: "cl", type: "file", label: "Cover letter" })], profile)).toEqual([]);
   });
 
-  it("requires 'current' before employer/company (regex precedence regression)", () => {
+  it("fills employer/company fields (not company URL fields) with the most recent company", () => {
     const result = asMap(
       mapProfileToFields(
         [
           field({ selector: "cur", label: "Current employer" }),
-          field({ selector: "any", label: "Company size preference" }),
+          field({ selector: "name", label: "Company Name" }),
+          field({ selector: "url", label: "Company URL" }),
         ],
         profile
       )
     );
-    expect(result).toEqual({ cur: "Nimbus Analytics" });
+    expect(result.cur).toBe("Nimbus Analytics");
+    expect(result.name).toBe("Nimbus Analytics");
+    expect(result.url).toBeUndefined();
   });
 
   it("never fills EEO questions, file inputs, or unknown free-text questions", () => {

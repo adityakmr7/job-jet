@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:fixtures": "node test-fixtures/serve.mjs",
     "verify:adapters": "tsx scripts/verify-adapters.ts",
+    "test:engine": "tsx scripts/test-engine.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },

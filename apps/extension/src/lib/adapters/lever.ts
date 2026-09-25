@@ -18,7 +18,7 @@ function byName(fields: DetectedField[], name: string): DetectedField | undefine
 
 export const leverAdapter: SiteAdapter = {
   name: "Lever",
-  matches: (hostname) => hostname === "jobs.lever.co",
+  matches: (hostname) => hostname === "lever.co" || hostname.endsWith(".lever.co"),
   mapFields(fields, profile: Profile) {
     const linkedin = findLink(profile, "linkedin");
     const github = findLink(profile, "github");

@@ -139,6 +139,22 @@ export async function fillFieldsInMainWorld(
           return setComboboxValue(el, value);
         }
 
+        if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
+          const valLower = value.trim().toLowerCase();
+          const shouldCheck =
+            valLower === "true" ||
+            valLower === "yes" ||
+            valLower === "1" ||
+            valLower === "on" ||
+            el.value.toLowerCase() === valLower;
+          const proto = HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, "checked")?.set;
+          setter?.call(el, shouldCheck);
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          return true;
+        }
+
         if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
           const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
           const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
@@ -149,12 +165,21 @@ export async function fillFieldsInMainWorld(
         }
 
         if (el instanceof HTMLSelectElement) {
-          const match = Array.from(el.options).find(
-            (o) => o.textContent?.trim().toLowerCase() === value.trim().toLowerCase()
+          const target = value.trim().toLowerCase();
+          const options = Array.from(el.options);
+          let match = options.find(
+            (o) => o.textContent?.trim().toLowerCase() === target || o.value.trim().toLowerCase() === target
           );
+          if (!match) {
+            const partial = options.filter(
+              (o) => o.textContent?.toLowerCase().includes(target) || o.value.toLowerCase().includes(target)
+            );
+            if (partial.length === 1) match = partial[0];
+          }
           if (match) {
             el.value = match.value;
             el.dispatchEvent(new Event("change", { bubbles: true }));
+            el.dispatchEvent(new Event("input", { bubbles: true }));
             return true;
           }
           return false;

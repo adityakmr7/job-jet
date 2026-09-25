@@ -37,7 +37,8 @@ export function mapProfileToFields(
 ): { selector: string; value: string }[] {
   const { first, last } = firstAndLastName(profile.fullName);
   const linkedin = findLink(profile, "linkedin");
-  const portfolio = findLink(profile, "portfolio", "website", "github");
+  const github = findLink(profile, "github");
+  const portfolio = findLink(profile, "portfolio", "website");
   const mostRecentJob = profile.experience[0];
   const mostRecentEducation = profile.education[0];
 
@@ -51,8 +52,12 @@ export function mapProfileToFields(
 
     // "Legal Name" is Ashby's actual label for this field on a real,
     // live posting — found by testing, not assumed; "full name" alone
-    // missed it entirely.
-    if (matches(field, /full.?name|legal.?name/i) && !matches(field, /first|last/i)) {
+    // missed it entirely. Also handle bare "Name" while excluding first/last/preferred/etc.
+    if (
+      (matches(field, /full.?name|legal.?name/i) ||
+        (matches(field, /\bname\b/i) && !matches(field, /first|last|middle|sur|user|company|school|employer|preferred/i))) &&
+      !matches(field, /first|last|middle|sur|preferred/i)
+    ) {
       value = profile.fullName;
     } else if (matches(field, /first.?name/i)) {
       value = first;
@@ -64,25 +69,21 @@ export function mapProfileToFields(
       value = profile.phone;
     } else if (matches(field, /linkedin/i)) {
       value = linkedin;
-    } else if (matches(field, /portfolio|personal.?website|\bwebsite\b|github/i)) {
-      // Broadened past "personal website" after real-world testing against
-      // Greenhouse: a company's custom question labeled just "Other
-      // Website" wasn't matching.
-      value = portfolio;
+    } else if (matches(field, /github/i)) {
+      value = github;
+    } else if (matches(field, /portfolio|personal.?website|\bwebsite\b/i)) {
+      value = portfolio ?? github;
     } else if (matches(field, /location|city|address/i)) {
       value = profile.location;
-    } else if (matches(field, /work.?authoriz/i)) {
+    } else if (matches(field, /authoriz.*work|work.*authoriz|right.*to.*work|work.*permit/i)) {
       value = yesNo(profile.workAuthorization?.authorizedToWork);
-    } else if (matches(field, /sponsorship/i)) {
+    } else if (matches(field, /sponsorship|require.*visa|visa.*sponsor/i)) {
       value = yesNo(profile.workAuthorization?.requiresSponsorship);
     } else if (matches(field, /cover.?letter/i) && field.type === "textarea") {
       value = profile.summary;
-    } else if (matches(field, /current.*(employer|company)/i) && mostRecentJob) {
-      // Grouped explicitly -- `/current.*employer|company/i` (no group)
-      // would match ANY field merely mentioning "company", unrelated to
-      // "current" at all, since | has lower precedence than concatenation.
+    } else if (matches(field, /\b(employer|company)\b/i) && !matches(field, /website|url/i) && mostRecentJob) {
       value = mostRecentJob.company;
-    } else if (matches(field, /current.*title|job.?title/i) && mostRecentJob) {
+    } else if (matches(field, /job.?title|\btitle\b/i) && !matches(field, /prefix|salutation/i) && mostRecentJob) {
       value = mostRecentJob.title;
     } else if (matches(field, /years.*experience/i) && profile.experience.length) {
       value = String(profile.experience.length);
