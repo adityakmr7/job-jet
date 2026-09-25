@@ -1,6 +1,7 @@
 {
   "name": "@job-jet/extension",
   "version": "0.0.1",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
