@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 import { buildSecurityHeaders } from "./src/lib/security-headers";
 
 const securityHeaders = buildSecurityHeaders({
-  clerkPublishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   isDev: process.env.NODE_ENV !== "production",
 });
 
