@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { rateLimits } from "@/db/schema";
@@ -91,6 +92,7 @@ export async function enforceRateLimit(
     console.error(`[rate-limit] ${rule.name} check failed, allowing request:`, err);
     return null;
   }
+  maybePruneLater();
   if (result.allowed) return null;
   return Response.json(
     { error: "Too many requests — please try again later.", retryAfterSeconds: result.retryAfterSeconds },
@@ -104,6 +106,16 @@ export async function enforceRateLimit(
       },
     }
   );
+}
+
+/** ~1% of checks schedule cleanup of old windows after the response. */
+function maybePruneLater(probability = 0.01) {
+  if (Math.random() >= probability) return;
+  try {
+    after(() => pruneRateLimits().catch((err) => console.error("[rate-limit] prune failed:", err)));
+  } catch {
+    // Outside a request scope (e.g. unit tests) — skip.
+  }
 }
 
 /** Deletes counters from windows that ended more than a day ago. */
