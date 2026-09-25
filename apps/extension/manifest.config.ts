@@ -44,28 +44,21 @@ export default defineManifest((configEnv: ConfigEnv) => {
         matches: ["<all_urls>"],
         js: ["src/content/index.ts"],
         run_at: "document_idle",
-        // Top frame only. Found live, on two separate real sites, why
-        // all_frames: true is actively harmful with nothing to show for
-        // it today: (1) job-boards.greenhouse.io's reCAPTCHA + Places-
-        // autocomplete iframes each got their own content-script
-        // instance, and chrome.tabs.sendMessage (no frameId given)
-        // broadcasts to every frame — whichever iframe's empty
-        // collectFormFields() result happened to respond first silently
-        // beat the real page's, surfacing as "0 fields detected" despite
-        // the real form clearly having fields. (2) linkedin.com/feed
-        // mounted the floating button three times on one page — once in
-        // the top document and once in each of two same-origin internal
-        // iframes, each independently passing the detection heuristic;
-        // mountFloatingButton()'s existing "already mounted" guard only
-        // checks within one document, so it can't prevent a second
-        // mount in a different frame's own DOM. No ATS we currently
-        // support is iframe-embedded, so there's no present use case
-        // this trades away — if one shows up, it should be a deliberate,
-        // targeted feature (the top frame scanning for known-ATS iframe
-        // src URLs and messaging that specific frame), not blanket
-        // injection into every iframe on every page (ads, trackers,
-        // embeds included).
-        all_frames: false,
+        // Every frame, but inert outside the top document unless the
+        // frame's own host is a known ATS (src/content/index.ts,
+        // shouldActivateInFrame). This used to be top-frame only, for two
+        // reasons found live that still hold and are handled explicitly now:
+        // (1) job-boards.greenhouse.io's reCAPTCHA + Places iframes each got
+        // a content-script instance and chrome.tabs.sendMessage (no frameId)
+        // let whichever empty iframe answered first win — those frames are
+        // not ATS hosts so the script does nothing there, and the side panel
+        // always addresses frames by explicit frameId anyway. (2) LinkedIn
+        // mounted the floating button in the top document and two internal
+        // iframes — the button is now only ever mounted by the top frame.
+        // What this buys: company careers pages that embed the real form as
+        // an ATS iframe (found live: careers.airbnb.com embeds
+        // job-boards.greenhouse.io/embed/job_app) can now be filled.
+        all_frames: true,
       },
     ],
     side_panel: {
