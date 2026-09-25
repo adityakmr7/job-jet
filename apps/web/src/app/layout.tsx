@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
@@ -14,8 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Jet",
-  description: "Autofill job applications anywhere and generate resumes tailored to each job description.",
+  title: {
+    default: "Job Jet — autofill job applications and tailor your resume",
+    template: "%s · Job Jet",
+  },
+  description:
+    "Job Jet is a Chrome extension that fills job application forms from your profile, tailors your resume to each role, and tracks every application.",
+  applicationName: "Job Jet",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#3346e0",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,11 +34,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-full focus:bg-ink focus:text-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold"
+        >
+          Skip to content
+        </a>
         <ClerkProvider
           appearance={{
             variables: {
-              colorPrimary: "#16a34a",
+              colorPrimary: "#3346e0",
+              colorForeground: "#0e1330",
+              colorMutedForeground: "#555c78",
               borderRadius: "0.75rem",
+              fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
             },
           }}
         >
