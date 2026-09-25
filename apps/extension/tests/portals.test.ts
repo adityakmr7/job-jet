@@ -222,6 +222,12 @@ describe("work authorization / sponsorship reach every Yes/No widget", () => {
     expect([value(yes), value(no)]).toEqual(["Yes", undefined]);
   });
 
+  it("Lever: 'Other website' isn't a copy of the portfolio URL the adapter already filled", () => {
+    const { fields, value } = fill("lever-eu-lever", HOSTS.lever);
+    expect(value(byLabel(fields, /^Portfolio URL/))).toBe("https://priyasharma.dev");
+    expect(value(byLabel(fields, /^Other website/))).toBeUndefined();
+  });
+
   it("Ashby Yes/No buttons", () => {
     const { fields, value } = fill("ashby-openai", HOSTS.ashby);
     expect(value(byLabel(fields, /authorized to work in the country/))).toBe("Yes");

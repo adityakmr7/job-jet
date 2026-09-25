@@ -158,7 +158,14 @@ function yearsOfExperience(profile: Profile): string | undefined {
   return years > 0 ? String(years) : undefined;
 }
 
-export function mapProfileToFields(fields: DetectedField[], profile: Profile): MapResult[] {
+/** @param allFields every field on the form (defaults to `fields`) — the
+ *  adapter tier may already have claimed some, but they still count as
+ *  context (e.g. whether a main Portfolio/Website field exists). */
+export function mapProfileToFields(
+  fields: DetectedField[],
+  profile: Profile,
+  allFields: DetectedField[] = fields
+): MapResult[] {
   const { first, last } = firstAndLastName(profile.fullName);
   const linkedin = findLink(profile, "linkedin");
   const github = findLink(profile, "github");
@@ -169,7 +176,7 @@ export function mapProfileToFields(fields: DetectedField[], profile: Profile): M
   // Lever/Greenhouse forms often have both "Portfolio URL"/"Website" and an
   // "Other website" field — found live: both got the same URL.
   const WEBSITE = /portfolio|personal.?(website|site)|\bwebsite\b|\bblog\b/i;
-  const hasMainWebsiteField = fields.some((f) => matches(f, WEBSITE) && !matches(f, /\bother\b/i));
+  const hasMainWebsiteField = allFields.some((f) => matches(f, WEBSITE) && !matches(f, /\bother\b/i));
 
   const results: MapResult[] = [];
 
@@ -287,7 +294,7 @@ export function runAutofillMapping(fields: DetectedField[], profile: Profile, ho
 
   const claimed = new Set(adapterResults.map((r) => r.selector));
   const remainingFields = fields.filter((f) => !claimed.has(f.selector));
-  const heuristicResults = mapProfileToFields(remainingFields, profile);
+  const heuristicResults = mapProfileToFields(remainingFields, profile, fields);
 
   return [...adapterResults, ...heuristicResults];
 }
