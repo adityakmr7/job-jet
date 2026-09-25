@@ -166,6 +166,10 @@ export function mapProfileToFields(fields: DetectedField[], profile: Profile): M
   const mostRecentJob = profile.experience[0];
   const mostRecentEducation = profile.education[0];
   const loc = parseLocation(profile.location);
+  // Lever/Greenhouse forms often have both "Portfolio URL"/"Website" and an
+  // "Other website" field — found live: both got the same URL.
+  const WEBSITE = /portfolio|personal.?(website|site)|\bwebsite\b|\bblog\b/i;
+  const hasMainWebsiteField = fields.some((f) => matches(f, WEBSITE) && !matches(f, /\bother\b/i));
 
   const results: MapResult[] = [];
 
@@ -209,8 +213,9 @@ export function mapProfileToFields(fields: DetectedField[], profile: Profile): M
       // bare profile URL.
       const profileField = label.length <= 30 || /url|profile|link|username|handle|account/.test(label);
       value = profileField && !isEssayLike(field) ? github : undefined;
-    } else if (matches(field, /portfolio|personal.?(website|site)|\bwebsite\b|\bblog\b/i)) {
-      value = isEssayLike(field) || field.type === "textarea" ? undefined : portfolio ?? github;
+    } else if (matches(field, WEBSITE)) {
+      const duplicate = matches(field, /\bother\b/i) && hasMainWebsiteField;
+      value = isEssayLike(field) || field.type === "textarea" || duplicate ? undefined : portfolio ?? github;
     } else if (matches(field, /street|address.?line|\baddress\b|zip|postal|post.?code/i)) {
       // A free-form location is never a street address or a zip code.
       value = undefined;
@@ -221,11 +226,20 @@ export function mapProfileToFields(fields: DetectedField[], profile: Profile): M
     } else if (matches(field, /country/i) && label.length <= 60 && !isEssayLike(field)) {
       value = loc.country;
     } else if (
-      matches(field, /location|where.{0,30}(located|based|live|reside)|current.?city|based in/i) &&
+      matches(
+        field,
+        /location|where.{0,30}(located|based|live|reside)|where.{0,40}(work(ing)? from|intend to work|plan(ning)? (to|on) work)|current.?city|based in/i
+      ) &&
       !isEssayLike(field) &&
       !matches(field, /prefer|willing|relocat|open to|office|timezone|time zone/i)
     ) {
-      value = profile.location;
+      // A "What is your location?" <select> of countries (Lever/Spotify)
+      // takes the derived country, not the free-form city string.
+      const countryOption =
+        field.type === "select" && loc.country
+          ? field.options?.find((o) => o.trim().toLowerCase().startsWith(loc.country!.toLowerCase()))
+          : undefined;
+      value = countryOption ? loc.country : profile.location;
     } else if (matches(field, /cover.?letter/i) && field.type === "textarea") {
       value = profile.summary;
     } else if (

@@ -29,6 +29,42 @@ describe("fieldText / matches", () => {
 });
 
 describe("mapProfileToFields (heuristic tier)", () => {
+  it("'Other website' is left empty when the form also has a Portfolio/Website field", () => {
+    const withMain = asMap(
+      mapProfileToFields(
+        [field({ selector: "a", label: "Portfolio URL" }), field({ selector: "b", label: "Other website" })],
+        profile
+      )
+    );
+    expect(withMain.a).toBeDefined();
+    expect(withMain.b).toBeUndefined();
+    const alone = asMap(mapProfileToFields([field({ selector: "b", label: "Other website" })], profile));
+    expect(alone.b).toBeDefined();
+  });
+
+  it("location questions phrased as 'where will you work from' get the profile location; a country <select> gets the country", () => {
+    const result = asMap(
+      mapProfileToFields(
+        [
+          field({ selector: "a", label: "From where do you intend to work?" }),
+          field({ selector: "b", label: "Where do you plan on working from (for payroll tax purposes)?" }),
+          field({
+            selector: "c",
+            type: "select",
+            label: "What is your location?",
+            options: ["Select...", "Afghanistan", "United Kingdom", "United States", "United States Minor Outlying Islands"],
+          }),
+          field({ selector: "d", label: "Are you open to relocating to London?" }),
+        ],
+        { ...profile, location: "San Francisco, CA" }
+      )
+    );
+    expect(result.a).toBe("San Francisco, CA");
+    expect(result.b).toBe("San Francisco, CA");
+    expect(result.c).toBe("United States");
+    expect(result.d).toBeUndefined();
+  });
+
   it("fills core contact fields from the profile", () => {
     const result = asMap(
       mapProfileToFields(
