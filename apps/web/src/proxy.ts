@@ -1,7 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Everything under /api is used by the extension and must be authenticated;
-// the rest of the app (marketing/sign-in pages) stays public by default.
+// the rest of the app (marketing, sign-in, /privacy, /terms) stays public by
+// default — the legal pages must stay reachable signed-out (Chrome Web Store
+// requires a public privacy policy URL).
 const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
