@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test:fixtures": "node test-fixtures/serve.mjs",
-    "verify:adapters": "tsx scripts/verify-adapters.ts"
+    "verify:adapters": "tsx scripts/verify-adapters.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@clerk/chrome-extension": "^3.1.82",
@@ -22,12 +23,15 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.31",
     "@types/chrome": "^0.0.287",
+    "@types/node": "^22.20.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^26.1.0",
     "tsx": "^4.23.13",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^3.2.7"
   },
   "engines": {
     "node": ">=22"

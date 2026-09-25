@@ -7,6 +7,8 @@
  * documented in apps/web/.env.example.
  */
 
+export type EnvSource = Record<string, string | undefined>;
+
 export const REQUIRED_SERVER_ENV = [
   "DATABASE_URL",
   "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -18,7 +20,7 @@ export const REQUIRED_SERVER_ENV = [
 export type RequiredServerEnv = (typeof REQUIRED_SERVER_ENV)[number];
 
 /** Returns the value of a required env var or throws a descriptive error. */
-export function requireEnv(name: RequiredServerEnv, env: NodeJS.ProcessEnv = process.env): string {
+export function requireEnv(name: RequiredServerEnv, env: EnvSource = process.env): string {
   const value = env[name]?.trim();
   if (!value) {
     throw new Error(`${name} is not set. See apps/web/.env.example for every required variable.`);
@@ -27,7 +29,7 @@ export function requireEnv(name: RequiredServerEnv, env: NodeJS.ProcessEnv = pro
 }
 
 /** Names of required variables that are missing/empty (for diagnostics). */
-export function missingServerEnv(env: NodeJS.ProcessEnv = process.env): RequiredServerEnv[] {
+export function missingServerEnv(env: EnvSource = process.env): RequiredServerEnv[] {
   return REQUIRED_SERVER_ENV.filter((name) => !env[name]?.trim());
 }
 

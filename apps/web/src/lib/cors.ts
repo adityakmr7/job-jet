@@ -1,4 +1,4 @@
-import { parseList } from "./env";
+import { parseList, type EnvSource } from "./env";
 
 /**
  * CORS for endpoints the extension calls cross-origin (chrome-extension://
@@ -24,7 +24,7 @@ export interface CorsConfig {
   isProduction: boolean;
 }
 
-export function corsConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CorsConfig {
+export function corsConfigFromEnv(env: EnvSource = process.env): CorsConfig {
   return {
     allowedExtensionIds: parseList(env.ALLOWED_EXTENSION_IDS),
     isProduction: env.NODE_ENV === "production",
