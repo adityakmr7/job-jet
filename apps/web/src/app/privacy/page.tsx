@@ -4,7 +4,7 @@ import { LegalPage } from "@/components/LegalPage";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: `Privacy Policy — ${SITE_NAME}`,
+  title: "Privacy Policy",
   description: `How ${SITE_NAME} collects, uses, and protects your data.`,
 };
 
@@ -67,7 +67,7 @@ export default function PrivacyPage() {
           use a feature described above (autofill or resume tailoring).
         </li>
         <li>
-          <strong>activeTab and scripting:</strong> to read the form fields on the current page and fill them with your
+          <strong>scripting:</strong> to read the form fields on the current page and fill them with your
           profile when you click Autofill (or when you turn on auto-continue for multi-step forms).
         </li>
         <li>

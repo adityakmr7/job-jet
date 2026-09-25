@@ -4,7 +4,7 @@ import { LegalPage } from "@/components/LegalPage";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: `Terms of Service — ${SITE_NAME}`,
+  title: "Terms of Service",
   description: `The terms that apply to using ${SITE_NAME}.`,
 };
 
