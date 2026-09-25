@@ -83,11 +83,21 @@ describe("detectJobApplication against fixture pages", () => {
 });
 
 describe("detectJobApplication host rules", () => {
-  it("short-circuits on known ATS hosts", () => {
-    const doc = new DOMParser().parseFromString("<body></body>", "text/html");
-    const result = detectJobApplication(doc, "https://jobs.lever.co/acme/123", DEV_BACKEND);
+  it("short-circuits on known ATS hosts that have an application form", () => {
+    const doc = new DOMParser().parseFromString(
+      '<body><form><input name="name"><input name="email" type="email"><input name="phone"><input type="file" name="resume"></form></body>',
+      "text/html"
+    );
+    const result = detectJobApplication(doc, "https://jobs.lever.co/acme/123/apply", DEV_BACKEND);
     expect(result).toMatchObject({ isJobApplication: true, confidence: 0.95 });
     expect(result.signals).toEqual(["known-ats:jobs.lever.co"]);
+  });
+
+  it("a known ATS host alone is not enough — no form, no button (bug 11)", () => {
+    const doc = new DOMParser().parseFromString("<body></body>", "text/html");
+    const result = detectJobApplication(doc, "https://jobs.lever.co/acme/123", DEV_BACKEND);
+    expect(result.isJobApplication).toBe(false);
+    expect(result.signals).toContain("no-application-form");
   });
 
   it("never flags Job Jet's own app (host derived from the backend URL)", () => {
@@ -104,5 +114,30 @@ describe("detectJobApplication host rules", () => {
       detectJobApplication(doc, "http://localhost:4000/careers/senior-frontend-engineer/apply/", DEV_BACKEND)
         .isJobApplication
     ).toBe(true);
+  });
+
+  it("flags a company careers page that embeds a Greenhouse application iframe (bug 10)", () => {
+    const doc = new DOMParser().parseFromString(
+      `<html><body><h1>Account Manager</h1><iframe src="https://job-boards.greenhouse.io/embed/job_app?for=airbnb&token=1"></iframe></body></html>`,
+      "text/html"
+    );
+    const result = detectJobApplication(doc, "https://careers.airbnb.com/positions/1", DEV_BACKEND);
+    expect(result.isJobApplication).toBe(true);
+    expect(result.signals).toContain("embedded-ats-iframe:1");
+  });
+
+  it("does not count an embedded LinkedIn frame or an iCIMS same-host job-description iframe (bug 11)", () => {
+    const linkedin = new DOMParser().parseFromString(
+      `<html><body><iframe src="https://www.linkedin.com/embed/feed"></iframe></body></html>`,
+      "text/html"
+    );
+    expect(detectJobApplication(linkedin, "https://example.com/blog", DEV_BACKEND).isJobApplication).toBe(false);
+    const icims = new DOMParser().parseFromString(
+      `<html><body><input type="text" id="keyword-search"><input type="text" id="location-search"><input type="text" name="vendor-search-handler"><iframe src="https://careers-acme.icims.com/jobs/6592/job?in_iframe=1"></iframe></body></html>`,
+      "text/html"
+    );
+    const result = detectJobApplication(icims, "https://careers-acme.icims.com/jobs/6592/job", DEV_BACKEND);
+    expect(result.isJobApplication).toBe(false);
+    expect(result.signals).toContain("no-application-form");
   });
 });
