@@ -5,6 +5,8 @@ import type { ExtensionMessage } from "../lib/messages";
 import { fetchProfile, tailorResume, downloadResume, upsertApplication, mapFieldsWithLLM } from "../lib/api";
 import { runAutofillMapping, matches, NEVER_FILL } from "../lib/autofill-map";
 import { fillFieldsInMainWorld } from "../lib/main-world-fill";
+import { matchSkills } from "../lib/skill-match";
+import logoUrl from "../assets/logo-mark-small.svg";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 const AUTO_CONTINUE_POLL_MS = 1500;
@@ -52,7 +54,13 @@ export function App() {
   const [fields, setFields] = useState<DetectedField[]>([]);
   const [jobDescription, setJobDescription] = useState("");
   const [jobTitle, setJobTitle] = useState<string | undefined>(undefined);
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatusState] = useState<Status | null>(null);
+  const [filling, setFilling] = useState(false);
+  const [lastFill, setLastFill] = useState<{ filled: number; total: number } | null>(null);
+  const [skills, setSkills] = useState<{ name: string }[] | null>(null);
+  const [pageHost, setPageHost] = useState<string | undefined>(undefined);
+  const [jdExpanded, setJdExpanded] = useState(false);
+  const setStatus = (text: string, tone: StatusTone = "info") => setStatusState({ text, tone });
   const [generating, setGenerating] = useState(false);
   // Armed after the first manual Autofill click — from then on, new fields
   // that appear (a multi-step wizard's next step) get filled automatically,
@@ -79,6 +87,11 @@ export function App() {
    *  the active tab navigates to a different site. */
   async function refreshPageData() {
     if (!isSignedInRef.current) return;
+    getActiveTab()
+      .then(({ hostname }) => setPageHost(hostname))
+      .catch(() => setPageHost(undefined));
+    setLastFill(null);
+    setJdExpanded(false);
     const fetchFields = sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
       type: "REQUEST_FORM_FIELDS",
     })
@@ -116,9 +129,17 @@ export function App() {
   useEffect(() => {
     if (!isSignedIn) return;
     refreshPageData();
+    // Skills power the local "skill match" card; best-effort, the panel
+    // works without them.
+    fetchProfile(getToken)
+      .then((profile) => setSkills(profile?.skills ?? []))
+      .catch(() => setSkills(null));
     getActiveTab().then(({ hostname }) => {
       lastHostnameRef.current = hostname;
     });
+    // Runs once per sign-in: getToken's identity isn't stable across
+    // renders, and refreshPageData reads everything it needs via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn]);
 
   // Re-sync "this page" whenever the user switches to a different tab —
@@ -219,7 +240,7 @@ export function App() {
 
     const allMapped = [...mapped, ...llmMapped];
     if (allMapped.length === 0) {
-      if (!auto) setStatus("Didn't recognize any fields we could fill on this page.");
+      if (!auto) setStatus("Didn't recognize any fields we could fill on this page.", "warning");
       return;
     }
     const values = Object.fromEntries(allMapped.map((m) => [m.selector, m.value]));
@@ -229,18 +250,20 @@ export function App() {
     // main-world-fill.ts for why: on a real React-controlled form,
     // isolated-world event dispatch silently doesn't stick.
     const result = await fillFieldsInMainWorld(tabId, values);
+    setLastFill((prev) => (auto && prev ? { filled: prev.filled + result.filled, total: prev.total + result.total } : result));
     const smartMatchNote = llmMapped.length > 0 ? ` (${llmMapped.length} via smart match)` : "";
     const prefix = auto
       ? `Auto-filled ${result.filled} more field${result.filled === 1 ? "" : "s"} on this step${smartMatchNote}`
       : `Filled ${result.filled} of ${result.total} fields${smartMatchNote}`;
     setStatus(
-      `${prefix} — some fields (file uploads, demographic questions, open-ended questions) ` +
-        `need your input. Double-check before submitting.`
+      `${prefix}. File uploads, demographic and open-ended questions still need you — review before submitting.`,
+      "success"
     );
   }
 
   async function handleAutofill() {
-    setStatus("Filling…");
+    setStatus("Filling this form…", "loading");
+    setFilling(true);
     try {
       // Profile fetch (network) and field scan (local messaging) don't
       // depend on each other — run them together rather than back to
@@ -253,10 +276,11 @@ export function App() {
         getActiveTab(),
       ]);
       if (!profile) {
-        setStatus("No saved profile yet — add one in the Job Jet dashboard first.");
+        setStatus("No saved profile yet — add one in the Job Jet dashboard first.", "warning");
         return;
       }
       profileRef.current = profile;
+      setSkills(profile.skills ?? []);
 
       const currentFields = res.payload.fields;
       setFields(currentFields);
@@ -270,7 +294,9 @@ export function App() {
       // requiring a separate "start tracking" action from the user.
       if (url) upsertApplication(getToken, { url, jobTitle, jobDescription, status: "draft" });
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Autofill failed on this page.");
+      setStatus(err instanceof Error ? err.message : "Autofill failed on this page.", "error");
+    } finally {
+      setFilling(false);
     }
   }
 
@@ -315,24 +341,25 @@ export function App() {
 
   async function handleGenerateResume() {
     if (!jobDescription) {
-      setStatus("Couldn't find a job description on this page to tailor a resume to.");
+      setStatus("Couldn't find a job description on this page to tailor a resume to.", "warning");
       return;
     }
     setGenerating(true);
-    setStatus("Generating tailored resume — this can take a few seconds…");
+    setStatus("Tailoring your resume to this job — this can take a few seconds…", "loading");
     try {
       const resume = await tailorResume(getToken, jobDescription);
-      setStatus(`Downloading "${resume.fileName}"…`);
+      setStatus(`Downloading "${resume.fileName}"…`, "loading");
       await downloadResume(getToken, resume.id, resume.fileName);
       setStatus(
-        `Downloaded "${resume.fileName}" — attach it manually on this page ` +
-          `(browsers don't allow extensions to auto-fill file inputs).`
+        `Saved "${resume.fileName}" to Downloads. Attach it in the form's resume field ` +
+          `(browsers don't let extensions fill file inputs).`,
+        "success"
       );
 
       const { url } = await getActiveTab();
       if (url) upsertApplication(getToken, { url, jobTitle, jobDescription, resumeId: resume.id, status: "draft" });
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Couldn't generate a tailored resume.");
+      setStatus(err instanceof Error ? err.message : "Couldn't generate a tailored resume.", "error");
     } finally {
       setGenerating(false);
     }
@@ -340,60 +367,208 @@ export function App() {
 
   if (!isLoaded) {
     return (
-      <div className="section">
-        <p className="hint">Loading…</p>
+      <div className="panel" aria-busy="true">
+        <header className="topbar">
+          <Brand />
+        </header>
+        <div className="card">
+          <div className="skeleton" style={{ width: "40%" }} />
+          <div className="skeleton" style={{ width: "70%", height: 28, marginTop: 12 }} />
+          <div className="skeleton" style={{ height: 42, marginTop: 16 }} />
+          <div className="skeleton" style={{ height: 42, marginTop: 8 }} />
+        </div>
+        <span className="sr-only">Loading…</span>
       </div>
     );
   }
 
   if (!isSignedIn) {
     return (
-      <div className="section">
-        <h1>Job Jet</h1>
-        <p>Sign in to autofill applications and generate tailored resumes.</p>
-        <button className="primary" onClick={openSignIn}>
-          Sign in
-        </button>
-        <p className="hint">Opens job-jet in a new tab — come back here once you're signed in.</p>
+      <div className="panel">
+        <header className="topbar">
+          <Brand />
+        </header>
+        <section className="card hero">
+          <h1>Apply in minutes, not evenings.</h1>
+          <p className="muted">Sign in to fill applications from your profile and tailor your resume to each job.</p>
+          <ul className="checklist">
+            <li>Autofill forms on any careers site</li>
+            <li>Tailored resume PDFs in seconds</li>
+            <li>Every application tracked for you</li>
+          </ul>
+          <button className="btn btn-primary" onClick={openSignIn}>
+            Sign in to Job Jet
+          </button>
+          <p className="hint">Opens Job Jet in a new tab. Come back here once you&apos;re signed in.</p>
+        </section>
       </div>
     );
   }
 
-  return (
-    <div>
-      <div className="section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 style={{ margin: 0 }}>Job Jet</h1>
-        <UserButton />
-      </div>
+  const match = skills && skills.length > 0 && jobDescription ? matchSkills(skills, jobDescription) : null;
+  const busy = filling || generating;
 
-      <div className="section">
-        <h2>This page</h2>
-        <p>{fields.length} form field{fields.length === 1 ? "" : "s"} detected.</p>
-        <button className="primary" onClick={handleAutofill}>
-          Autofill with my profile
-        </button>
-        <button className="secondary" onClick={handleGenerateResume} disabled={generating || !jobDescription}>
-          {generating ? "Generating…" : "Generate tailored resume for this job"}
-        </button>
+  return (
+    <div className="panel">
+      <header className="topbar">
+        <Brand />
+        <UserButton />
+      </header>
+
+      <section className="card" aria-labelledby="page-heading">
+        <div className="card-head">
+          <h2 id="page-heading" className="eyebrow">
+            This page
+          </h2>
+          {pageHost && (
+            <span className="chip" title={pageHost}>
+              {pageHost}
+            </span>
+          )}
+        </div>
+        {jobTitle && <p className="job-title">{jobTitle}</p>}
+        <div className="stat-row">
+          <div className="stat">
+            <span className="stat-value">{fields.length}</span>
+            <span className="stat-label">field{fields.length === 1 ? "" : "s"} detected</span>
+          </div>
+          {lastFill && (
+            <div className="stat">
+              <span className="stat-value accent">{lastFill.filled}</span>
+              <span className="stat-label">filled</span>
+            </div>
+          )}
+        </div>
+        {lastFill && lastFill.total > 0 && (
+          <div
+            className="progress"
+            role="progressbar"
+            aria-label="Fields filled"
+            aria-valuemin={0}
+            aria-valuemax={lastFill.total}
+            aria-valuenow={lastFill.filled}
+          >
+            <div style={{ width: `${Math.min(100, (lastFill.filled / lastFill.total) * 100)}%` }} />
+          </div>
+        )}
+
+        <div className="actions">
+          <button className="btn btn-primary" onClick={handleAutofill} disabled={busy}>
+            {filling ? <Spinner /> : <BoltIcon />}
+            {filling ? "Filling…" : lastFill ? "Autofill again" : "Autofill this application"}
+          </button>
+          <button className="btn btn-secondary" onClick={handleGenerateResume} disabled={busy || !jobDescription}>
+            {generating ? <Spinner /> : <SparkIcon />}
+            {generating ? "Tailoring…" : "Tailor my resume to this job"}
+          </button>
+        </div>
+
         {autoContinue && (
-          <p className="hint" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span>🟢 Watching for new steps — new fields fill automatically.</span>
-            <button
-              type="button"
-              onClick={() => setAutoContinue(false)}
-              style={{ background: "none", border: "none", color: "inherit", textDecoration: "underline", cursor: "pointer", padding: 0 }}
-            >
+          <div className="watching" role="status">
+            <span className="pulse" aria-hidden="true" />
+            <span>Watching for the next step — new fields fill automatically.</span>
+            <button type="button" className="link-btn" onClick={() => setAutoContinue(false)}>
               Stop
             </button>
-          </p>
+          </div>
         )}
-        {status && <p className="hint">{status}</p>}
-      </div>
 
-      <div className="section">
-        <h2>Job description detected</h2>
-        <p className="hint">{jobDescription ? `${jobDescription.slice(0, 240)}…` : "None found on this page."}</p>
-      </div>
+        {status && (
+          <div className={`alert alert-${status.tone}`} role={status.tone === "error" ? "alert" : "status"}>
+            {status.tone === "loading" && <Spinner />}
+            <span>{status.text}</span>
+          </div>
+        )}
+      </section>
+
+      {match && (
+        <section className="card" aria-labelledby="match-heading">
+          <div className="card-head">
+            <h2 id="match-heading" className="eyebrow">
+              Skill match
+            </h2>
+            <span className={`score ${match.score >= 50 ? "good" : match.score >= 25 ? "ok" : "low"}`}>{match.score}%</span>
+          </div>
+          <p className="muted small">
+            {match.matched.length} of {match.matched.length + match.missing.length} skills from your profile appear in
+            this job post.
+          </p>
+          {match.matched.length > 0 && (
+            <ul className="chips" aria-label="Skills this job mentions">
+              {match.matched.slice(0, 12).map((s) => (
+                <li key={s} className="chip chip-success">
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      <section className="card" aria-labelledby="jd-heading">
+        <div className="card-head">
+          <h2 id="jd-heading" className="eyebrow">
+            Job description
+          </h2>
+          {jobDescription && <span className="chip chip-accent">Detected</span>}
+        </div>
+        {jobDescription ? (
+          <>
+            <p className={`jd ${jdExpanded ? "expanded" : ""}`}>{jobDescription.slice(0, jdExpanded ? 4000 : 280)}{!jdExpanded && jobDescription.length > 280 ? "…" : ""}</p>
+            {jobDescription.length > 280 && (
+              <button type="button" className="link-btn" onClick={() => setJdExpanded((v) => !v)} aria-expanded={jdExpanded}>
+                {jdExpanded ? "Show less" : "Show more"}
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="muted small">None found on this page. Open the job post itself to tailor a resume.</p>
+        )}
+      </section>
+
+      <footer className="panel-footer">
+        <a href={`${SYNC_HOST}/dashboard`} target="_blank" rel="noopener noreferrer">
+          Profile
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href={`${SYNC_HOST}/dashboard/applications`} target="_blank" rel="noopener noreferrer">
+          Applications
+        </a>
+      </footer>
     </div>
+  );
+}
+
+type StatusTone = "info" | "success" | "warning" | "error" | "loading";
+type Status = { text: string; tone: StatusTone };
+
+function Brand() {
+  return (
+    <span className="brand">
+      <img src={logoUrl} alt="" width={24} height={24} />
+      <span>
+        Job<span className="brand-accent">Jet</span>
+      </span>
+    </span>
+  );
+}
+
+function Spinner() {
+  return <span className="spinner" aria-hidden="true" />;
+}
+
+function BoltIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />
+    </svg>
   );
 }

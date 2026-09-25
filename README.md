@@ -180,12 +180,24 @@ extension ID, `NEXT_PUBLIC_CONTACT_EMAIL`). Run migrations against the
 production database before (or right after) deploying a release that
 includes a new migration.
 
-**Extension (Chrome Web Store):** create `apps/extension/.env.production`
-with `pk_live_…` and the deployed `https://` web app URL, run
-`npm run release:extension`, and upload `release/job-jet-extension-v<version>.zip`.
-The store listing needs the public privacy policy URL
-(`https://<your-domain>/privacy`). After the first upload, add the store
-extension ID to `ALLOWED_EXTENSION_IDS` and to Clerk's `allowed_origins`.
+**Extension (Chrome Web Store):** once the production domain and live Clerk
+key exist, run this from the repo root:
+
+```bash
+cat > apps/extension/.env.production <<'ENV'
+VITE_CLERK_PUBLISHABLE_KEY=pk_live_...           # same key as the web app's NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+VITE_CLERK_SYNC_HOST=https://<your-domain>       # deployed web app origin, no trailing slash
+ENV
+npm ci && npm run release:extension
+# -> release/job-jet-extension-v<version>.zip  (git-ignored; upload this file)
+```
+
+The build refuses `pk_test_` keys, `http://` hosts and localhost in production
+mode. Store listing text, permission justifications and images are in
+[`store-assets/`](store-assets/LISTING.md). The listing also needs the public
+privacy policy URL (`https://<your-domain>/privacy`). After the first upload,
+add the store extension ID to `ALLOWED_EXTENSION_IDS` (web env) and to Clerk's
+`allowed_origins`.
 
 ## Releasing
 
@@ -193,7 +205,7 @@ extension ID to `ALLOWED_EXTENSION_IDS` and to Clerk's `allowed_origins`.
    from it) and keep `apps/web`, `packages/shared` and the root in sync.
 2. Move `[Unreleased]` entries in `CHANGELOG.md` under the new version.
 3. Open a PR; merge when CI is green.
-4. Tag the merge commit (`git tag v0.1.0 && git push origin v0.1.0`) and
+4. Tag the merge commit (`git tag v<version> && git push origin v<version>`) and
    create a GitHub release from the changelog section.
 5. Run migrations on production, deploy the web app, then
    `npm run release:extension` and upload the zip to the Chrome Web Store.
@@ -208,6 +220,14 @@ extension ID to `ALLOWED_EXTENSION_IDS` and to Clerk's `allowed_origins`.
 - The AI never produces values typed into forms: autofill's LLM tier only
   picks a key from an allow-list, and tailoring can only reword existing
   content — both enforced in code.
+- Security headers (CSP, frame-ancestors, HSTS, …) come from
+  `apps/web/src/lib/security-headers.ts`. See [`SECURITY.md`](SECURITY.md) for
+  the threat model, permission justifications and how to report issues.
+
+## Design
+
+The visual identity, tokens, components and accessibility rules are documented
+in [`DESIGN.md`](DESIGN.md).
 
 ## How detection works
 
@@ -220,11 +240,12 @@ pages and unlisted ATSs still get picked up. Runs on `document_idle` and
 re-runs on SPA route changes via a `MutationObserver`, since job boards are
 almost all client-side routed.
 
-On a positive detection, a floating button is injected into a shadow DOM
-(host-page-CSS-proof) in the bottom-right corner. Clicking it opens the
-`chrome.sidePanel`, which shows the saved profile, an "Autofill" action, and
-a "Generate tailored resume for this job" action (auto-extracts the JD text
-from the page).
+On a positive detection, a floating launcher is injected into a closed shadow
+root (host-page-CSS-proof, and unreachable by page scripts) in the bottom-right
+corner; the user can hide it for the page. Clicking it opens the
+`chrome.sidePanel`, which shows what was detected on the page, an "Autofill"
+action, a "Tailor my resume to this job" action (auto-extracts the JD text
+from the page), and a local skill-match summary.
 
 ## Autofill engine
 

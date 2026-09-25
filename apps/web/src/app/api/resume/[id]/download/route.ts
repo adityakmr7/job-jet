@@ -6,6 +6,7 @@ import { getOrCreateUser } from "@/lib/get-or-create-user";
 import { corsHeaders } from "@/lib/cors";
 import { withErrorHandling } from "@/lib/http";
 import { UuidSchema } from "@/lib/validation";
+import { downloadHeaders } from "@/lib/download";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
@@ -39,8 +40,7 @@ export const GET = withErrorHandling(
   return new Response(blob.stream, {
     headers: {
       ...headers,
-      "Content-Type": blob.blob.contentType || "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${resume.fileName.replace(/"/g, "")}"`,
+      ...downloadHeaders(resume.fileName, blob.blob.contentType),
     },
   });
   }

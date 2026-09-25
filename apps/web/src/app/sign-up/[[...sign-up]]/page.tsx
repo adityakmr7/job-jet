@@ -1,16 +1,10 @@
 import { SignUp } from "@clerk/nextjs";
-import { Logo } from "@/components/Logo";
+import { AuthLayout } from "@/components/AuthLayout";
 
 export default function Page() {
   return (
-    <div className="relative flex-1 flex flex-col items-center justify-center py-16 overflow-hidden">
-      <div className="absolute inset-0 bg-grid pointer-events-none" aria-hidden />
-      <div className="relative mb-8">
-        <Logo size={32} />
-      </div>
-      <div className="relative">
-        <SignUp />
-      </div>
-    </div>
+    <AuthLayout title="Spend less time on forms and more time on interviews.">
+      <SignUp />
+    </AuthLayout>
   );
 }

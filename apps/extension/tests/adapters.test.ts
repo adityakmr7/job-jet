@@ -11,14 +11,17 @@ describe("getAdapter", () => {
     ["boards.greenhouse.io", "Greenhouse"],
     ["job-boards.greenhouse.io", "Greenhouse"],
     ["jobs.lever.co", "Lever"],
+    ["jobs.eu.lever.co", "Lever"], // EU-hosted Lever postings
+    ["lever.co", "Lever"],
     ["jobs.ashbyhq.com", "Ashby"],
   ])("%s -> %s", (host, name) => {
     expect(getAdapter(host)?.name).toBe(name);
   });
 
   it("returns undefined for other hosts", () => {
-    expect(getAdapter("lever.co")).toBeUndefined(); // only the jobs.lever.co application host
     expect(getAdapter("careers.example.com")).toBeUndefined();
+    expect(getAdapter("notlever.co")).toBeUndefined(); // suffix match is on ".lever.co" only
+    expect(getAdapter("lever.co.evil.example")).toBeUndefined();
   });
 });
 

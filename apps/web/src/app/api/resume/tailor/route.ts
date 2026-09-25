@@ -11,6 +11,7 @@ import { renderResumePdf } from "@/lib/resume-pdf";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { TailorRequestSchema, validationErrorBody } from "@/lib/validation";
+import { toResumeDto } from "@/lib/resume-dto";
 
 export async function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
@@ -91,5 +92,5 @@ export const POST = withErrorHandling("api/resume/tailor POST", async (req: Requ
     throw err;
   }
 
-  return NextResponse.json({ resume: saved }, { headers });
+  return NextResponse.json({ resume: toResumeDto(saved) }, { headers });
 });

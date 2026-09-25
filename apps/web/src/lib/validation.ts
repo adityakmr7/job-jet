@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LinkSchema, ProfileSchema } from "@job-jet/shared";
 import { applicationStatusEnum } from "@/db/schema";
 import { ALLOWED_PROFILE_FIELD_PATHS, type ProfileFieldPath } from "./field-paths";
 
@@ -55,6 +56,25 @@ export type IncomingField = z.infer<typeof IncomingFieldSchema>;
 export const AutofillMapRequestSchema = z.object({
   domain: z.string().min(1).max(LIMITS.url),
   fields: z.array(IncomingFieldSchema).max(LIMITS.autofillFields),
+});
+
+/** True for absolute http(s) URLs only (rejects javascript:, data:, etc.). */
+export function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** PUT /api/profile. Profile links end up in autofilled forms and could be
+ *  rendered as links later — only http(s) is accepted. */
+export const ProfileInputSchema = ProfileSchema.omit({ id: true, userId: true, updatedAt: true }).extend({
+  links: z
+    .array(LinkSchema.extend({ url: z.string().max(LIMITS.url).refine(isHttpUrl, "Links must start with http:// or https://") }))
+    .max(50)
+    .default([]),
 });
 
 /** POST /api/applications (extension upsert). */

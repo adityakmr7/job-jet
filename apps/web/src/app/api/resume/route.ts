@@ -9,6 +9,7 @@ import { parseResumeText } from "@/lib/resume-parse";
 import { withErrorHandling } from "@/lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { LIMITS } from "@/lib/validation";
+import { toResumeDto } from "@/lib/resume-dto";
 
 // Note: Vercel Functions cap request bodies at ~4.5MB, which is below this
 // limit on that platform; the check still guards other hosts.
@@ -25,7 +26,7 @@ export const GET = withErrorHandling("api/resume GET", async () => {
     .where(eq(resumes.userId, user.id))
     .orderBy(desc(resumes.createdAt));
 
-  return NextResponse.json({ resumes: rows });
+  return NextResponse.json({ resumes: rows.map(toResumeDto) });
 });
 
 /** Best-effort removal of an orphaned upload; never masks the original error. */
@@ -101,7 +102,7 @@ export const POST = withErrorHandling("api/resume POST", async (req: Request) =>
       })
       .returning();
 
-    return NextResponse.json({ resume: saved });
+    return NextResponse.json({ resume: toResumeDto(saved) });
   } catch (err) {
     deleteBlobLater(blob.url);
     throw err;

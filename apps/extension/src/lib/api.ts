@@ -1,4 +1,5 @@
 import type { DetectedField, Profile } from "@job-jet/shared";
+import { safeDownloadFilename } from "./download-name";
 
 const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
 
@@ -64,7 +65,7 @@ export async function downloadResume(
   const token = await getToken();
   if (!token) throw new Error("Not signed in");
 
-  const res = await fetch(`${SYNC_HOST}/api/resume/${resumeId}/download`, {
+  const res = await fetch(`${SYNC_HOST}/api/resume/${encodeURIComponent(resumeId)}/download`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Couldn't download the resume (${res.status})`);
@@ -75,7 +76,12 @@ export async function downloadResume(
   // no extra prompt, since the point is to have the file immediately
   // ready to pick in the form's own file dialog, not to make the user
   // choose a location for a file they're about to re-select anyway.
-  await chrome.downloads.download({ url: objectUrl, filename: fileName, saveAs: false });
+  try {
+    await chrome.downloads.download({ url: objectUrl, filename: safeDownloadFilename(fileName), saveAs: false });
+  } finally {
+    // Chrome has read the blob once download() resolves; free it shortly after.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
 }
 
 /** Tier 3 of the autofill engine — for fields the heuristic + adapter

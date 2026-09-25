@@ -153,3 +153,17 @@ describe("validationErrorBody", () => {
     expect(validationErrorBody(result.error!).error).toBe("Invalid request");
   });
 });
+
+describe("ProfileInputSchema links", () => {
+  const base = { fullName: "Priya", email: "priya@example.com" };
+  it("accepts http(s) links", async () => {
+    const { ProfileInputSchema } = await import("@/lib/validation");
+    expect(ProfileInputSchema.safeParse({ ...base, links: [{ label: "GitHub", url: "https://github.com/p" }] }).success).toBe(true);
+  });
+  it("rejects javascript: and data: links", async () => {
+    const { ProfileInputSchema, isHttpUrl } = await import("@/lib/validation");
+    expect(ProfileInputSchema.safeParse({ ...base, links: [{ label: "x", url: "javascript:alert(1)" }] }).success).toBe(false);
+    expect(isHttpUrl("data:text/html,hi")).toBe(false);
+    expect(isHttpUrl("not a url")).toBe(false);
+  });
+});
