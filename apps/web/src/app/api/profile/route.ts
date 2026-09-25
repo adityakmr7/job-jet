@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { profiles } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
 import { ProfileInputSchema } from "@/lib/validation";
@@ -20,8 +20,7 @@ export async function OPTIONS(req: Request) {
 
 export const GET = withErrorHandling("api/profile GET", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const db = getDb();
   const [profile] = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1);
@@ -31,8 +30,7 @@ export const GET = withErrorHandling("api/profile GET", async (req: Request) => 
 
 export const PUT = withErrorHandling("api/profile PUT", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const body = await readJsonBody(req, MAX_PROFILE_BYTES);
   const parsed = ProfileInputSchema.safeParse(body);

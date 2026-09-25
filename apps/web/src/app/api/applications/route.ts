@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { applications } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
 import { ApplicationUpsertSchema, validationErrorBody } from "@/lib/validation";
@@ -14,8 +14,7 @@ export async function OPTIONS(req: Request) {
 
 export const GET = withErrorHandling("api/applications GET", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const db = getDb();
   const rows = await db
@@ -48,8 +47,7 @@ export const GET = withErrorHandling("api/applications GET", async (req: Request
  */
 export const POST = withErrorHandling("api/applications POST", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const parsedBody = ApplicationUpsertSchema.safeParse(await readJsonBody(req));
   if (!parsedBody.success) {

@@ -12,8 +12,8 @@ export type EnvSource = Record<string, string | undefined>;
 export const REQUIRED_SERVER_ENV = [
   "DATABASE_URL",
   "GOOGLE_GENERATIVE_AI_API_KEY",
-  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
-  "CLERK_SECRET_KEY",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
   "BLOB_READ_WRITE_TOKEN",
 ] as const;
 
@@ -40,4 +40,21 @@ export function parseList(value: string | undefined): string[] {
     .split(/[\s,]+/)
     .map((v) => v.trim())
     .filter(Boolean);
+}
+
+/** Reads an optional env var, returning undefined for unset/blank values. */
+export function optionalEnv(name: string, env: EnvSource = process.env): string | undefined {
+  const value = env[name]?.trim();
+  return value ? value : undefined;
+}
+
+/** Google sign-in is enabled only when both OAuth credentials are set. */
+export function isGoogleAuthConfigured(env: EnvSource = process.env): boolean {
+  return Boolean(optionalEnv("GOOGLE_CLIENT_ID", env) && optionalEnv("GOOGLE_CLIENT_SECRET", env));
+}
+
+/** A real email provider (Resend) is configured — required for email
+ *  verification to be enforced and for password-reset mail in production. */
+export function isEmailProviderConfigured(env: EnvSource = process.env): boolean {
+  return Boolean(optionalEnv("RESEND_API_KEY", env));
 }

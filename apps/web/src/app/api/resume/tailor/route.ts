@@ -4,7 +4,7 @@ import { put, del } from "@vercel/blob";
 import type { ResumeContent } from "@job-jet/shared";
 import { getDb } from "@/db";
 import { profiles, resumes } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { tailorResume } from "@/lib/resume-tailor";
 import { renderResumePdf } from "@/lib/resume-pdf";
@@ -26,8 +26,7 @@ export async function OPTIONS(req: Request) {
  */
 export const POST = withErrorHandling("api/resume/tailor POST", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const parsed = TailorRequestSchema.safeParse(await readJsonBody(req));
   if (!parsed.success) {

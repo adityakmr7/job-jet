@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { get } from "@vercel/blob";
 import { getDb } from "@/db";
 import { resumes } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { withErrorHandling } from "@/lib/http";
 import { UuidSchema } from "@/lib/validation";
@@ -19,8 +19,7 @@ export const GET = withErrorHandling(
   "api/resume/[id]/download GET",
   async (req: Request, { params }: { params: Promise<{ id: string }> }) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const { id } = await params;
   if (!UuidSchema.safeParse(id).success) {
