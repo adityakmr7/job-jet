@@ -41,11 +41,8 @@ jobs:
 
       - name: Build extension (production mode, placeholder config)
         env:
-          # Placeholders only — not real credentials. The key is
-          # pk_live_ + base64("clerk.example.com$") so it passes the
-          # build-time format check in apps/extension/env.config.ts.
-          VITE_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuZXhhbXBsZS5jb20k
-          VITE_CLERK_SYNC_HOST: https://jobjet.example.com
+          # Placeholder only (no secrets are needed to build the extension).
+          VITE_API_BASE_URL: https://jobjet.example.com
         run: npm run build:extension
 
       - name: Build web

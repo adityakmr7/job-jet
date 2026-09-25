@@ -26,21 +26,26 @@ graph TB
     end
 
     subgraph Vercel["Next.js app (Vercel)"]
-        Proxy["proxy.ts<br/>(Clerk auth + CORS preflight passthrough)"]
+        Proxy["proxy.ts<br/>(session-cookie redirect for /dashboard)"]
+        Auth["/api/auth/*<br/>Better Auth (+ extension/token)"]
+        Connect["/extension-connect"]
         API["/api/profile, /api/resume<br/>route handlers"]
         Dashboard["/dashboard<br/>profile editor, resume upload"]
         Proxy --> API
         Proxy --> Dashboard
     end
 
-    Clerk["Clerk<br/>(auth, session sync)"]
+    Google["Google OAuth<br/>(optional sign-in)"]
     Neon["Neon Postgres<br/>(via Drizzle)"]
     Blob["Vercel Blob<br/>(resume files)"]
     Gemini["Gemini API<br/>(resume parsing)"]
 
     SidePanel -- "Bearer token,\ncross-origin fetch" --> API
-    Content -- "extension ID" --> Clerk
-    Dashboard -- "session cookie" --> Clerk
+    SidePanel -- "opens tab" --> Connect
+    Connect -- "externally_connectable\nsendMessage(token)" --> SidePanel
+    Connect -- "cookie session" --> Auth
+    Auth --> Google
+    Auth --> Neon
     API --> Neon
     API --> Blob
     API --> Gemini
@@ -215,32 +220,65 @@ Two things it **deliberately never fills**, by design, not oversight:
 Getting the profile into the side panel at all required solving a
 cross-origin problem: the extension (`chrome-extension://...`) and the web
 app (`https://...`) are different origins with no shared cookie jar. The
-side panel gets a Clerk session token via `useAuth().getToken()` and sends
-it as `Authorization: Bearer <token>` (`apps/extension/src/lib/api.ts`);
+side panel holds its own session token (handed over by `/extension-connect`,
+see below) and sends it as `Authorization: Bearer <token>`
+(`apps/extension/src/lib/api.ts`);
 the backend answers with matching CORS headers scoped to the extension IDs
 listed in `ALLOWED_EXTENSION_IDS` (any `chrome-extension://` origin in
-development if unset; none in production — `apps/web/src/lib/cors.ts`), and `proxy.ts`
-lets the unauthenticated `OPTIONS` preflight through so the CORS handshake
-itself isn't blocked by Clerk's auth check before the browser ever sends
-the real request.
+development if unset; none in production — `apps/web/src/lib/cors.ts`). The
+`OPTIONS` preflight is answered without auth so the CORS handshake isn't
+blocked before the browser sends the real request.
 
-## Auth: one Clerk session, two surfaces
+## Auth: Better Auth, two surfaces
 
-- **Web app**: standard `@clerk/nextjs`, `ClerkProvider` in `layout.tsx`
-  (inside `<body>` — a Clerk Core 3 requirement), `proxy.ts` protecting
-  `/dashboard` and `/api/*` via `clerkMiddleware`. Every protected route
-  also does its own resource-level `auth()` check (not just relying on the
-  middleware matcher) — Clerk's own deprecation notice on
-  `createRouteMatcher` warns that path-matching in middleware can diverge
-  from actual routing.
-- **Extension**: `@clerk/chrome-extension`'s `ClerkProvider`, configured
-  with `syncHost` pointed at the web app and
-  `__experimental_syncHostListener` enabled — without that flag, a session
-  started on the web app only reflects in the side panel after it's closed
-  and reopened (a documented SDK limitation); the listener makes it live.
-- **Data model**: Clerk is the identity source of truth; a `users` row is
-  lazily upserted (`get-or-create-user.ts`) the first time an authenticated
-  request touches the database, rather than syncing via webhooks.
+Accounts live in our own Postgres, managed by the `better-auth` library
+(`apps/web/src/lib/auth/server.ts`, Drizzle adapter). No hosted auth service.
+
+- **Web app**: email + password and optional Google OAuth. Session cookies
+  are httpOnly/SameSite=Lax (Secure in production). `proxy.ts` only checks
+  that a session cookie *exists* to redirect signed-out visitors quickly
+  (`getSessionCookie`); the real check happens in the page/route:
+  `requirePageUser()` in server components and `requireUser(req)` in every
+  API route, which also rejects cookie-authenticated mutations from foreign
+  origins (defence in depth on top of SameSite and Better Auth's own origin
+  check). Ownership checks (`where userId = user.id`) are unchanged.
+- **Extension**: a dedicated session per install, handed over once:
+  1. Side panel → "Connect" → opens `/extension-connect?ext=<id>&state=<nonce>`
+     (nonce in `chrome.storage.session`, 10 min, single use).
+  2. The signed-in user clicks **Connect extension**; the page calls
+     `POST /api/auth/extension/token` (custom Better Auth plugin,
+     `src/lib/auth/extension-plugin.ts`). It requires the cookie session,
+     refuses bearer-authenticated callers and non-allowlisted IDs, and
+     creates a new session labelled `Job Jet extension (<id>)` (replacing
+     that install's previous one). The token is signed like the cookie
+     (`token.HMAC`), so it only works with `BETTER_AUTH_SECRET`.
+  3. `chrome.runtime.sendMessage(<id>, {type: "jobjet:connect", v: 1, state,
+     token, expiresAt, user})` — delivered only to that extension, and only
+     accepted because the manifest's `externally_connectable.matches` lists
+     the web origin. The background worker re-checks the sender's exact
+     origin (incl. port) and path, the schema and the nonce, then stores the
+     token in `chrome.storage.local`.
+  4. API calls send `Authorization: Bearer` with `credentials: "omit"`.
+     401 → token cleared, panel shows "Reconnect". Sign-out →
+     `POST /api/auth/sign-out` with the bearer (revokes the session), then
+     local clear. Users can also disconnect it from Account settings.
+- **Bearer rules (server)**: `withTrustedAuthorization` drops the
+  Authorization header when the request has a non-extension Origin (web
+  pages always send Origin cross-origin and can't forge
+  `chrome-extension://`; Chrome omits Origin on extension GETs, so a missing
+  Origin is allowed). `isBearerSessionAllowed` then requires the session to
+  be an extension session for a still-allowlisted ID matching the Origin if
+  present. The auth route strips cookies from, and `Set-Cookie` headers
+  out of, extension/bearer requests — Chrome would otherwise let an
+  extension response overwrite the web app's cookie.
+- **Why not share the web cookie with the extension** (the Clerk approach):
+  it needs the `cookies` permission, ties the extension to the web session
+  (signing out of one kills the other) and gives no per-install revocation.
+  A handed-over token is narrower, revocable and visible in Account settings.
+- **Data model**: Better Auth's `user`, `session`, `account`, `verification`
+  and `auth_rate_limit` tables. App tables reference `user.id` with
+  `ON DELETE CASCADE`. Migration `0002_better_auth` carried Clerk-era
+  `users` rows into `user` with their existing ids.
 
 ## Data model (Neon Postgres, via Drizzle)
 
@@ -248,7 +286,8 @@ the real request.
 
 | Table | Purpose |
 |---|---|
-| `users` | Mirrors the Clerk user — stable FK target for everything else. |
+| `user` / `session` / `account` / `verification` | Better Auth: identities, sessions (web + extension), credentials/OAuth links, email tokens. `user.id` is the FK target for everything else. |
+| `auth_rate_limit` | Better Auth's rate-limit counters. |
 | `profiles` | One per user: the structured data autofill reads from and the profile dashboard editor writes to. |
 | `resumes` | Every uploaded original and AI-tailored version — structured content, Blob URL, `kind` (`uploaded_original` / `ai_tailored`). |
 | `applications` | Job tracker — schema exists (`status`: detected → draft → applied → interviewing → rejected/offer), **not yet wired to any UI**. |
@@ -327,9 +366,8 @@ values in the extension's `sidepanel/styles.css`, so the web app and the
 extension read as one product rather than two. **Light theme only, by
 deliberate choice** — `color-scheme: light` (not `light dark`) and no
 `prefers-color-scheme` media query, so the app renders light regardless of
-the visitor's OS setting; this also makes Clerk's own components
-(`<SignIn>`, `<UserButton>`, etc., which auto-adapt to the `color-scheme`
-property) stay light without any extra config. An earlier version of this
+the visitor's OS setting (the auth pages are our own components on the same
+tokens). An earlier version of this
 system supported both themes — dropped in favor of light-only per explicit
 direction, along with the color palette itself (warm cream background,
 vivid green accent) taken from a reference image, restyling the brand mark
@@ -353,7 +391,7 @@ actually looking rather than assumed: Chrome's native autofill styling
 was overriding our input colors with its own grey/yellow highlight
 (`:-webkit-autofill` needs its own override, globals.css); Job Jet's own
 web app is now explicitly excluded from the extension's detection (its
-host is derived from the build's `VITE_CLERK_SYNC_HOST` — `localhost:3001`
+host is derived from the build's `VITE_API_BASE_URL` — `localhost:3001`
 in dev, the deployed domain in production; see `own-app.ts`) — the profile/resume dashboard has enough genuine
 form-field evidence (real inputs, a real file upload) to pass the
 heuristic even after the earlier text-keyword fix, so the floating button
@@ -436,9 +474,9 @@ step advancing — and fills just those, no repeat click needed.
 
 **Why polling, not a `MutationObserver` message from the content script**:
 detecting "new fields appeared" is something the content script could do
-on its own, but *acting* on them (fetch the profile, map it) needs the
-Clerk session, which only exists in the side panel's React context — the
-content script is an isolated world with no access to it. So the content
+on its own, but *acting* on them (fetch the profile, map it) is the side
+panel's job (it owns the auth state and API calls) — the content script is
+an isolated world that deliberately never touches the token. So the content
 script stays dumb (it just answers `REQUEST_FORM_FIELDS` on request, same
 as the manual path) and the side panel does the noticing.
 

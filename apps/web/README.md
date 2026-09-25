@@ -18,7 +18,10 @@ npm run dev:web                                # http://localhost:3001
 ```
 
 The dev server is pinned to **port 3001**; the extension's
-`VITE_CLERK_SYNC_HOST` must point at it.
+`VITE_API_BASE_URL` and `BETTER_AUTH_URL` must point at it. A local Postgres
+works too: a `localhost` `DATABASE_URL` switches the client to node-postgres.
+Without `RESEND_API_KEY`, verification and password-reset links are printed
+to the dev server console.
 
 ## Scripts
 
@@ -34,18 +37,22 @@ The dev server is pinned to **port 3001**; the extension's
 | `db:migrate:env` | Apply migrations using `DATABASE_URL` from the environment (CI/production) |
 | `db:baseline` | One-time: mark `0000_initial_schema` applied on a DB created with `db:push` |
 | `db:push` / `db:studio` | Dev-only schema push / Drizzle Studio |
+| `auth:migrate-clerk` | Optional, one-off: import a Clerk users export (`-- --file export.csv [--apply]`, dry run by default) |
 
 ## Environment
 
 Every variable is documented in [`.env.example`](.env.example). Secrets are
 read lazily at request time (`src/lib/env.ts`), so builds don't need them.
 In production, `ALLOWED_EXTENSION_IDS` must list the Chrome Web Store
-extension ID or the extension's API calls will be blocked by CORS.
+extension ID or the extension can't connect (no token, no bearer auth, no
+CORS).
 
 ## API routes
 
-All routes require a Clerk session (cookie from the dashboard, or a Bearer
-token from the extension). Errors are JSON `{ "error": string }`.
+All routes call `requireUser(req)` (`src/lib/auth/session.ts`): a Better Auth
+session cookie from the web app, or an extension bearer token (never accepted
+from a web origin, and bound to an allowlisted extension). No session → 401.
+Errors are JSON `{ "error": string }`.
 
 | Route | Methods | Notes |
 | --- | --- | --- |
@@ -56,15 +63,17 @@ token from the extension). Errors are JSON `{ "error": string }`.
 | `/api/autofill/map` | POST | LLM fallback field matching + shared cache; ≤ 150 fields; 60 LLM calls/hour/user |
 | `/api/applications` | GET, POST | Tracker list / upsert by URL |
 | `/api/applications/[id]` | PATCH, DELETE | Edit (zod-validated, resume ownership checked) / delete |
+| `/api/auth/*` | GET, POST | Better Auth: sign-in/up, Google OAuth callback, sessions, password reset, email verification, `delete-user`, and `extension/token` (mints the extension's session) |
 
 ## Layout
 
 ```
 src/app/            pages + API route handlers
 src/components/     shared UI (header, footer, dashboard shell, legal page layout)
-src/db/             Drizzle schema + lazy Neon client
-src/lib/            AI calls, validation, rate limiting, CORS, HTTP helpers
+src/db/             Drizzle schema (incl. Better Auth tables) + lazy DB client
+src/lib/auth/       Better Auth config, session helpers, origin policy, extension-token plugin
+src/lib/            AI calls, email senders, validation, rate limiting, CORS, HTTP helpers
 drizzle/            generated SQL migrations (commit these)
-scripts/            db-baseline.mjs
-tests/              Vitest unit tests
+scripts/            db-baseline.mjs, migrate-clerk-users.mjs
+tests/              Vitest tests (auth tests run against PGlite with the real migrations)
 ```
