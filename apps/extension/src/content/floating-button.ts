@@ -16,7 +16,7 @@ export function mountFloatingButton(onClick: () => void): void {
   host.style.right = "24px";
   document.documentElement.appendChild(host);
 
-  const shadow = host.attachShadow({ mode: "open" });
+  const shadow = host.attachShadow({ mode: "closed" });
 
   const style = document.createElement("style");
   style.textContent = `

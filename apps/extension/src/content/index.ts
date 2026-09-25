@@ -2,7 +2,7 @@ import { detectJobApplication } from "../lib/detect";
 import { mountFloatingButton, unmountFloatingButton } from "./floating-button";
 import { collectFormFields } from "../lib/fields";
 import { extractJobDescription, extractJobTitle } from "../lib/jd-extract";
-import type { ExtensionMessage } from "../lib/messages";
+import { isExtensionMessage, isTrustedSender, type ExtensionMessage } from "../lib/messages";
 
 /**
  * Guard against running setup twice in the same document. Chrome
@@ -66,7 +66,9 @@ if (!globalWindow[GUARD_KEY]) {
   window.addEventListener("popstate", scheduleDetection);
 
   // Respond to requests from the side panel (relayed via background).
-  chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    // Only the extension's own side panel may ask for page data.
+    if (!isTrustedSender(sender) || !isExtensionMessage(message)) return false;
     switch (message.type) {
       case "REQUEST_FORM_FIELDS":
         sendResponse({ type: "FORM_FIELDS_RESULT", payload: { fields: collectFormFields() } });

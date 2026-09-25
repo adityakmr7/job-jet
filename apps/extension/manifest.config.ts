@@ -68,13 +68,28 @@ export default defineManifest((configEnv: ConfigEnv) => {
     side_panel: {
       default_path: "src/sidepanel/index.html",
     },
+    // Permission justifications (also in store-assets/LISTING.md and SECURITY.md):
     // storage: required by @clerk/chrome-extension unconditionally.
     // cookies: required because we use syncHost (session sync with the web app).
+    // scripting: fills React/Vue-controlled inputs from the MAIN world
+    //   (see src/lib/main-world-fill.ts) — only on the tab the user is
+    //   actively autofilling, only after they click Autofill.
+    // sidePanel: the extension's UI.
     // downloads: lets the tailored-resume flow save the generated PDF
-    // straight to disk (chrome.downloads.download) instead of only
-    // opening it in a tab, so it's immediately available to pick in the
-    // ATS form's own file-upload dialog.
-    permissions: ["storage", "cookies", "activeTab", "scripting", "sidePanel", "downloads"],
+    //   straight to disk (chrome.downloads.download) instead of only
+    //   opening it in a tab, so it's immediately available to pick in the
+    //   ATS form's own file-upload dialog.
+    // activeTab was dropped: it's fully redundant with the <all_urls> host
+    // permission below, which the content script needs anyway to detect
+    // application forms on arbitrary career sites (there's no fixed list
+    // of ATS domains to narrow it to — see ARCHITECTURE.md).
+    permissions: ["storage", "cookies", "scripting", "sidePanel", "downloads"],
     host_permissions: ["<all_urls>"],
+    // Explicit MV3 policy: no remote or inline code in extension pages.
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'",
+    },
+    // chrome.sidePanel.open() (used by the floating button) needs 116+.
+    minimum_chrome_version: "116",
   };
 });
