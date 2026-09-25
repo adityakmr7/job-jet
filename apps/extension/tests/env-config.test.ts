@@ -1,83 +1,60 @@
 import { describe, expect, it } from "vitest";
-import { assertExtensionEnv, validateExtensionEnv } from "../env.config";
-
-const liveKey = `pk_live_${btoa("clerk.jobjet.example.com$")}`;
-const testKey = `pk_test_${btoa("fast-fox-1.clerk.accounts.dev$")}`;
+import { assertExtensionEnv, externallyConnectableMatch, validateExtensionEnv } from "../env.config";
 
 describe("validateExtensionEnv", () => {
   it("accepts a valid development config", () => {
-    expect(
-      validateExtensionEnv(
-        { VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "http://localhost:3001" },
-        "development"
-      )
-    ).toEqual({ errors: [], warnings: [] });
+    expect(validateExtensionEnv({ VITE_API_BASE_URL: "http://localhost:3001" }, "development")).toEqual({
+      errors: [],
+      warnings: [],
+    });
   });
 
   it("accepts a valid production config", () => {
-    expect(
-      validateExtensionEnv(
-        { VITE_CLERK_PUBLISHABLE_KEY: liveKey, VITE_CLERK_SYNC_HOST: "https://jobjet.example.com" },
-        "production"
-      )
-    ).toEqual({ errors: [], warnings: [] });
+    expect(validateExtensionEnv({ VITE_API_BASE_URL: "https://jobjet.example.com" }, "production")).toEqual({
+      errors: [],
+      warnings: [],
+    });
   });
 
-  it("rejects missing or blank required vars in any mode", () => {
-    const { errors } = validateExtensionEnv({ VITE_CLERK_PUBLISHABLE_KEY: "  " }, "development");
-    expect(errors).toContain("VITE_CLERK_PUBLISHABLE_KEY is missing or empty.");
-    expect(errors).toContain("VITE_CLERK_SYNC_HOST is missing or empty.");
+  it("no longer needs a Clerk key, and warns about leftovers", () => {
+    const { errors, warnings } = validateExtensionEnv(
+      { VITE_API_BASE_URL: "https://jobjet.example.com", VITE_CLERK_PUBLISHABLE_KEY: "pk_live_x" },
+      "production"
+    );
+    expect(errors).toEqual([]);
+    expect(warnings[0]).toMatch(/VITE_CLERK_PUBLISHABLE_KEY is no longer used/);
   });
 
-  it("rejects malformed keys and URLs", () => {
-    const { errors } = validateExtensionEnv(
-      { VITE_CLERK_PUBLISHABLE_KEY: "sk_live_secret", VITE_CLERK_SYNC_HOST: "jobjet.example.com" },
-      "development"
+  it("rejects a missing or blank backend URL in any mode", () => {
+    expect(validateExtensionEnv({ VITE_API_BASE_URL: "  " }, "development").errors).toContain(
+      "VITE_API_BASE_URL is missing or empty."
     );
-    expect(errors.some((e) => e.includes("doesn't look like a Clerk publishable key"))).toBe(true);
-    expect(errors.some((e) => e.includes("must be an absolute URL"))).toBe(true);
+  });
 
-    const undecodable = validateExtensionEnv(
-      { VITE_CLERK_PUBLISHABLE_KEY: "pk_test_x", VITE_CLERK_SYNC_HOST: "http://localhost:3001" },
-      "development"
-    );
-    expect(undecodable.errors.some((e) => e.includes("malformed"))).toBe(true);
-
-    const ftp = validateExtensionEnv(
-      { VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "ftp://x.com" },
-      "development"
-    );
-    expect(ftp.errors.some((e) => e.includes("http(s)"))).toBe(true);
+  it("rejects malformed URLs, non-http schemes and paths", () => {
+    const bad = (value: string) => validateExtensionEnv({ VITE_API_BASE_URL: value }, "development").errors;
+    expect(bad("jobjet.example.com").some((e) => e.includes("must be an absolute URL"))).toBe(true);
+    expect(bad("ftp://x.com").some((e) => e.includes("http(s)"))).toBe(true);
+    expect(bad("https://x.com/app").some((e) => e.includes("no path"))).toBe(true);
   });
 
   it("rejects dev values in production builds", () => {
-    const { errors } = validateExtensionEnv(
-      { VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "http://localhost:3001" },
-      "production"
-    );
+    const { errors } = validateExtensionEnv({ VITE_API_BASE_URL: "http://localhost:3001" }, "production");
     expect(errors.some((e) => e.includes("local dev server"))).toBe(true);
-    expect(errors.some((e) => e.includes("pk_test_"))).toBe(true);
   });
 
   it("requires https in production", () => {
-    const { errors } = validateExtensionEnv(
-      { VITE_CLERK_PUBLISHABLE_KEY: liveKey, VITE_CLERK_SYNC_HOST: "http://jobjet.example.com" },
-      "production"
-    );
+    const { errors } = validateExtensionEnv({ VITE_API_BASE_URL: "http://jobjet.example.com" }, "production");
     expect(errors.some((e) => e.includes("https"))).toBe(true);
   });
 
   it("downgrades production checks to warnings with JOBJET_ALLOW_DEV_CONFIG", () => {
     const result = validateExtensionEnv(
-      {
-        VITE_CLERK_PUBLISHABLE_KEY: testKey,
-        VITE_CLERK_SYNC_HOST: "http://127.0.0.1:3001",
-        JOBJET_ALLOW_DEV_CONFIG: "true",
-      },
+      { VITE_API_BASE_URL: "http://127.0.0.1:3001", JOBJET_ALLOW_DEV_CONFIG: "true" },
       "production"
     );
     expect(result.errors).toEqual([]);
-    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings).toHaveLength(1);
   });
 
   it("the override never bypasses missing values", () => {
@@ -88,8 +65,13 @@ describe("validateExtensionEnv", () => {
 
 describe("assertExtensionEnv", () => {
   it("throws one readable error listing every problem", () => {
-    expect(() => assertExtensionEnv({}, "production")).toThrow(
-      /VITE_CLERK_PUBLISHABLE_KEY is missing[\s\S]*VITE_CLERK_SYNC_HOST is missing/
-    );
+    expect(() => assertExtensionEnv({}, "production")).toThrow(/VITE_API_BASE_URL is missing/);
+  });
+});
+
+describe("externallyConnectableMatch", () => {
+  it("limits external messaging to the web app's origin", () => {
+    expect(externallyConnectableMatch("https://jobjet.example.com")).toBe("https://jobjet.example.com/*");
+    expect(externallyConnectableMatch("http://localhost:3001")).toBe("http://localhost/*");
   });
 });

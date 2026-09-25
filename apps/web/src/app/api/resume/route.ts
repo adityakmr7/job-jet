@@ -3,7 +3,7 @@ import { put, del } from "@vercel/blob";
 import { eq, desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { resumes } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { extractResumeText } from "@/lib/extract-text";
 import { parseResumeText } from "@/lib/resume-parse";
 import { withErrorHandling } from "@/lib/http";
@@ -15,9 +15,8 @@ import { toResumeDto } from "@/lib/resume-dto";
 // limit on that platform; the check still guards other hosts.
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-export const GET = withErrorHandling("api/resume GET", async () => {
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const GET = withErrorHandling("api/resume GET", async (req: Request) => {
+  const user = await requireUser(req);
 
   const db = getDb();
   const rows = await db
@@ -39,8 +38,7 @@ function deleteBlobLater(url: string) {
 /** Uploads a resume file, extracts its text, stores the original in Blob,
  *  and has the model structure it into the canonical Profile-compatible shape. */
 export const POST = withErrorHandling("api/resume POST", async (req: Request) => {
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await requireUser(req);
 
   const declaredLength = Number(req.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_FILE_SIZE + 64 * 1024) {

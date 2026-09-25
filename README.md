@@ -23,8 +23,10 @@ scripts/       Repo-level tooling (extension release zip)
 
 - **Extension**: Manifest V3, Vite + `@crxjs/vite-plugin`, React side panel.
 - **Backend**: Next.js 16 (App Router) API routes on Vercel.
-- **Auth**: Clerk — the official `@clerk/chrome-extension` SDK syncs the web
-  app's session into the extension. Multi-user from day one.
+- **Auth**: [Better Auth](https://www.better-auth.com) (self-hosted library;
+  users and sessions live in our own Neon Postgres via Drizzle). Email +
+  password and Google sign-in on the web; the extension connects with a
+  dedicated bearer token. See [Authentication](#authentication).
 - **Database**: Neon Postgres via Drizzle ORM, with SQL migrations in
   `apps/web/drizzle`.
 - **File storage**: Vercel Blob, private store (uploaded resumes + generated
@@ -42,7 +44,7 @@ npm ci
 
 # 1. Web app / API — http://localhost:3001 (pinned; 3000 is often taken)
 cp apps/web/.env.example apps/web/.env.local   # fill in values (or `vercel env pull`)
-npm run db:migrate --workspace=apps/web        # create tables (new database)
+npm run db:migrate --workspace=apps/web        # create/upgrade tables
 npm run dev:web
 
 # 2. Extension
@@ -55,10 +57,142 @@ Then load `apps/extension/dist` as an unpacked extension in
 extension's reload icon — Chrome doesn't pick up on-disk changes to an
 already-loaded unpacked extension on its own.
 
-For session sync, register the extension's origin
-(`chrome-extension://<id>`, shown on `chrome://extensions`) in Clerk's
-`allowed_origins`, and keep `VITE_CLERK_SYNC_HOST` matched to the port
-`npm run dev:web` actually binds to.
+Keep `VITE_API_BASE_URL` matched to the port `npm run dev:web` binds to. In
+development, with `ALLOWED_EXTENSION_IDS` empty, any unpacked extension can
+connect; open the side panel, click **Connect to Job Jet** and approve on the
+web page that opens.
+
+**Local Postgres instead of Neon (optional):** when `DATABASE_URL` points at
+`localhost`/`127.0.0.1`, the app uses node-postgres instead of Neon's HTTP
+driver, so a plain local Postgres works for development
+(`DATABASE_URL=postgres://user:pass@localhost:5432/jobjet`).
+
+## Authentication
+
+Accounts are stored in our own database by
+[Better Auth](https://www.better-auth.com) (`better-auth` npm package, Drizzle
+adapter). No third-party auth service is involved; Google sign-in uses plain
+Google OAuth.
+
+- **Web**: email + password (10–128 characters) and **Continue with Google**
+  (shown only when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set). Sessions
+  are httpOnly, SameSite=Lax cookies (`Secure` + `__Secure-` prefix in
+  production), valid 30 days, refreshed daily. Pages: `/sign-in`, `/sign-up`,
+  `/forgot-password`, `/reset-password`, `/verify-email`,
+  `/dashboard/account` (change password, connected devices, delete account).
+- **Server helpers** (`apps/web/src/lib/auth/session.ts`): `requireUser(req)`
+  in every API route (401 JSON otherwise; ownership checks and rate limits are
+  unchanged and still scope every query to `user.id`), `requirePageUser()` /
+  `getSession()` in server components. `src/proxy.ts` only does a fast
+  cookie-presence redirect; the real session check happens server-side.
+- **Rate limiting**: Better Auth's limiter, stored in Postgres
+  (`auth_rate_limit`), per IP: sign-in 10/minute, sign-up 5 per 10 minutes,
+  password-reset and verification emails 5 per 10 minutes, change-password 10
+  and delete-account 5 per 10 minutes; 100/minute for everything else.
+- **Extension**: see [Extension auth](#extension-auth) below.
+- **Account deletion** (`/dashboard/account`) requires the password (or a
+  recent sign-in for Google-only accounts), deletes the user's resume files
+  from Vercel Blob first, then the user row — profiles, resumes, applications,
+  sessions and linked accounts cascade.
+
+### Email verification tradeoff
+
+Email sending is pluggable (`apps/web/src/lib/email.ts`):
+
+- **`RESEND_API_KEY` set** → emails go through Resend, and email verification
+  is **required** before password sign-in (Google accounts are verified by
+  Google).
+- **Not set** → a console sender prints verification/reset links to the server
+  log **in development only**; in production it logs a warning and sends
+  nothing. Verification is **not enforced**, because users couldn't receive
+  the email and would be locked out. The tradeoff: without an email provider
+  anyone can sign up with an address they don't own (they can't take over an
+  existing account — duplicate emails are rejected — but the address isn't
+  proven), and "forgot password" can't work in production. Configure Resend
+  before launch.
+
+### Extension auth
+
+1. The side panel's **Connect to Job Jet** opens
+   `https://<web>/extension-connect?ext=<extension id>&state=<one-time nonce>`
+   in a tab (the nonce is kept in `chrome.storage.session`, single use, 10
+   minutes).
+2. The user signs in on the web if needed and clicks **Connect extension**.
+   The page calls `POST /api/auth/extension/token` with its cookie session
+   (Better Auth's origin check applies); the server refuses extension IDs not
+   in `ALLOWED_EXTENSION_IDS` and mints a **new, separate session** labelled
+   `Job Jet extension (<id>)`, replacing that install's previous one.
+3. The page hands the signed token to that extension ID only, with
+   `chrome.runtime.sendMessage(extId, …)`. The manifest's
+   `externally_connectable` only lets the production web origin (plus
+   `localhost` in dev builds) message the extension, and the background worker
+   also checks the exact sender origin, the `/extension-connect` path, the
+   message schema and the nonce.
+4. The extension stores the token in `chrome.storage.local` and sends it as
+   `Authorization: Bearer <token>`; `credentials: "omit"` keeps it
+   bearer-only. On a 401 it clears the token and shows **Reconnect**.
+   **Sign out** revokes the session server-side and clears it locally; the web
+   **Account settings → Where you're signed in** can disconnect it too.
+
+The server accepts a bearer token only if (a) the request doesn't come from a
+web origin (browsers always send Origin cross-origin, and pages can't forge
+`chrome-extension://`), and (b) the session was minted for an extension ID
+that is still allowlisted — and, when an Origin is present, for that exact
+extension. A web session cookie can't be replayed as a bearer token, and a
+bearer token can't mint more tokens. Tokens are HMAC-signed with
+`BETTER_AUTH_SECRET`, so a database leak alone doesn't yield usable tokens.
+See [`SECURITY.md`](SECURITY.md) for the reasoning.
+
+### Google sign-in setup
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → create or pick
+   a project.
+2. **APIs & Services → OAuth consent screen** (Google Auth Platform →
+   Branding/Audience): app name "Job Jet", support email, app logo optional,
+   **authorized domain** = your production domain, developer contact email,
+   privacy policy `https://<domain>/privacy`, terms `https://<domain>/terms`.
+   Scopes: only `openid`, `.../auth/userinfo.email`,
+   `.../auth/userinfo.profile` (non-sensitive, no verification review
+   needed). User type **External**; while in *Testing*, add test users, then
+   **Publish app** for launch.
+3. **Credentials → Create credentials → OAuth client ID → Web application**:
+   - Authorized JavaScript origins: `https://<domain>` and
+     `http://localhost:3001`.
+   - Authorized redirect URIs: `https://<domain>/api/auth/callback/google` and
+     `http://localhost:3001/api/auth/callback/google` (add preview domains
+     only if you really sign in on them).
+4. Copy the client ID/secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+   (Vercel env, and `.env.local` for development). Use separate clients for
+   production and development if you prefer.
+
+Account linking is enabled for Google: signing in with Google using the same
+email as an existing email+password account links the two (Google has verified
+the address), which is also how migrated Clerk users regain access.
+
+### Migrating existing Clerk users (optional)
+
+The app isn't launched, so this is optional. Migration `0002_better_auth`
+already keeps existing rows: every old `users` row becomes a Better Auth
+`user` with the **same id** (the Clerk `user_…` id), so profiles, resumes and
+applications stay attached. Those users have no password; they either sign in
+with Google (linked by email) or use **Forgot password**.
+
+To bring over names/verification status (or users who never touched the
+database) from a Clerk export (Dashboard → Users → Export, CSV or JSON):
+
+```bash
+cd apps/web
+npm run db:migrate                                              # first
+npm run auth:migrate-clerk -- --file ./clerk-users.csv          # dry run (default): prints the plan
+npm run auth:migrate-clerk -- --file ./clerk-users.csv --apply  # writes, one transaction per user
+```
+
+For each Clerk user (matched by primary email) it creates the Better Auth
+user with the Clerk name and `emailVerified`, moves `profiles`/`resumes`/
+`applications` from the Clerk id to a fresh Better Auth id, or merges them
+into an existing Better Auth account with the same email. Re-running is safe.
+It never imports password hashes (Clerk's bcrypt digests aren't portable). Take a database backup (Neon
+branch) first.
 
 ## Environment variables
 
@@ -68,11 +202,13 @@ For session sync, register the extension's origin
 | --- | --- |
 | `DATABASE_URL` | Neon Postgres connection string |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini API key (resume parsing, tailoring, autofill matching) |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Clerk auth |
+| `BETTER_AUTH_SECRET` | Signs session cookies/tokens. `openssl rand -base64 32`; different per environment |
+| `BETTER_AUTH_URL` | Public origin of the app (`https://<domain>`, `http://localhost:3001` locally) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional: Google sign-in (see [setup](#google-sign-in-setup)) |
+| `RESEND_API_KEY` / `EMAIL_FROM` | Optional: verification + password-reset emails via Resend; also turns on required email verification |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store) |
-| `ALLOWED_EXTENSION_IDS` | Comma-separated Chrome extension IDs allowed by CORS. Empty = any extension in dev, **none in production** |
+| `ALLOWED_EXTENSION_IDS` | Comma-separated Chrome extension IDs that may connect (get tokens), use bearer auth and CORS. Empty = any extension in dev, **none in production** |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | Contact address shown on `/privacy` and `/terms` |
-| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Optional: `/sign-in`, `/sign-up` |
 
 Secrets are read lazily at request time, so `next build` works without them.
 
@@ -80,13 +216,12 @@ Secrets are read lazily at request time, so `next build` works without them.
 
 | Variable | Purpose |
 | --- | --- |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Same publishable key as the web app |
-| `VITE_CLERK_SYNC_HOST` | Web app origin: Clerk sync host **and** API base URL; its host is excluded from job detection |
+| `VITE_API_BASE_URL` | Web app origin (no path): API base URL, the `/extension-connect` page, and the only origin allowed to message the extension; its host is excluded from job detection |
 | `JOBJET_ALLOW_DEV_CONFIG` | Optional, not bundled: `true` downgrades production checks to warnings |
 
 The build **fails** if a required value is missing or malformed. Production
 builds (`npm run build`, mode `production`, reads `.env.production`) also fail
-if the backend is localhost / not https or the Clerk key is `pk_test_`. Use
+if the backend is localhost or not https. Use
 `npm run build:dev --workspace=apps/extension` (reads `.env.development`) for
 a local unpacked build.
 
@@ -118,8 +253,12 @@ Database scripts (`--workspace=apps/web`): `db:generate`, `db:migrate`,
   postings, field collection (labels, honeypots, shadow DOM), and build-env
   validation.
 - `apps/web/tests` — CORS, request validation and size limits, rate limiting,
-  error handling, field-path resolution, and the AI-output merge logic
-  (the AI SDK is mocked; no network or database needed).
+  error handling, field-path resolution, the AI-output merge logic, and auth:
+  real Better Auth + the real API routes against an in-process Postgres
+  ([PGlite](https://pglite.dev)) with the real migrations — 401s, cookie vs
+  bearer rules, ownership (no IDOR), sign-out revocation, account deletion,
+  the `0002` migration and the Clerk import script (the AI SDK and Blob are
+  mocked; no network or external database needed).
 - `packages/shared/tests` — zod schemas and field signatures.
 
 CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and both builds
@@ -175,29 +314,29 @@ has migration history.
 
 **Web (Vercel):** the Vercel project's Root Directory should be `apps/web`. Set every variable from
 `apps/web/.env.example` in the Vercel project (production values: `pk_live_`/
-`sk_live_` Clerk keys, `ALLOWED_EXTENSION_IDS` with the Chrome Web Store
-extension ID, `NEXT_PUBLIC_CONTACT_EMAIL`). Run migrations against the
+a fresh `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://<domain>`, Google OAuth
+credentials, `RESEND_API_KEY`/`EMAIL_FROM`, `ALLOWED_EXTENSION_IDS` with the
+Chrome Web Store extension ID, `NEXT_PUBLIC_CONTACT_EMAIL`). Run migrations against the
 production database before (or right after) deploying a release that
 includes a new migration.
 
-**Extension (Chrome Web Store):** once the production domain and live Clerk
-key exist, run this from the repo root:
+**Extension (Chrome Web Store):** once the production domain exists, run this
+from the repo root:
 
 ```bash
 cat > apps/extension/.env.production <<'ENV'
-VITE_CLERK_PUBLISHABLE_KEY=pk_live_...           # same key as the web app's NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-VITE_CLERK_SYNC_HOST=https://<your-domain>       # deployed web app origin, no trailing slash
+VITE_API_BASE_URL=https://<your-domain>          # deployed web app origin, no trailing slash
 ENV
 npm ci && npm run release:extension
 # -> release/job-jet-extension-v<version>.zip  (git-ignored; upload this file)
 ```
 
-The build refuses `pk_test_` keys, `http://` hosts and localhost in production
+The build refuses `http://` hosts and localhost in production
 mode. Store listing text, permission justifications and images are in
 [`store-assets/`](store-assets/LISTING.md). The listing also needs the public
 privacy policy URL (`https://<your-domain>/privacy`). After the first upload,
-add the store extension ID to `ALLOWED_EXTENSION_IDS` (web env) and to Clerk's
-`allowed_origins`.
+add the store extension ID to `ALLOWED_EXTENSION_IDS` (web env) — until then
+the published extension can't connect.
 
 ## Releasing
 
@@ -216,7 +355,8 @@ add the store extension ID to `ALLOWED_EXTENSION_IDS` (web env) and to Clerk's
   `apps/web/src/lib/rate-limit.ts`) and all JSON bodies are size-capped and
   zod-validated (`apps/web/src/lib/validation.ts`).
 - The API only reflects CORS for extension IDs in `ALLOWED_EXTENSION_IDS`;
-  every route still requires a Clerk session.
+  every route still requires a session (web cookie, or an extension bearer
+  token bound to an allowlisted extension).
 - The AI never produces values typed into forms: autofill's LLM tier only
   picks a key from an allow-list, and tailoring can only reword existing
   content — both enforced in code.
@@ -254,7 +394,7 @@ writeup, including what got found by inspecting two real live job postings:
 1. **Heuristic (done)** — `apps/extension/src/lib/autofill-map.ts` matches
    detected fields against the user's saved profile purely by name/id/label
    keyword, entirely client-side. Fetches the profile from `/api/profile`
-   cross-origin (the extension's Clerk session token as a Bearer header —
+   cross-origin (the extension's session token as a Bearer header —
    see `src/lib/api.ts` and the backend's `src/lib/cors.ts`). Deliberately
    never fills voluntary EEO self-identification fields (gender, ethnicity,
    veteran/disability status, pronouns) — those stay opt-in and manual.
@@ -316,6 +456,9 @@ sites but is not implemented yet.
       correct fields filled, EEO/file/no-data-source fields correctly
       skipped, confirmed against the profile's real (unset) data via the
       API rather than assumed.
+      *(Superseded in 0.3.0: Clerk was replaced by Better Auth and the
+      extension connects via `/extension-connect` — see
+      [Authentication](#authentication).)*
 - [x] Auto-continue for multi-step forms, and a full application tracker
       (auto-populated by the extension, managed from the dashboard) — see
       `docs/ARCHITECTURE.md`.

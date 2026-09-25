@@ -23,8 +23,15 @@ export default function PrivacyPage() {
       <h2>Data we collect</h2>
       <h3>Account information</h3>
       <p>
-        Sign-in is handled by <a href="https://clerk.com/legal/privacy">Clerk</a>. We receive and store your Clerk user
-        ID and email address so your data can be linked to your account.
+        We store accounts in our own database: your name, email address, whether your email is verified, and — if you
+        sign up with a password — a salted, one-way hash of your password (never the password itself). We also keep
+        your active sign-in sessions (with the device&apos;s IP address and browser user agent) so you can see and sign
+        out of them in Account settings.
+      </p>
+      <p>
+        If you choose <strong>Continue with Google</strong>, sign-in happens through Google OAuth: Google shares your
+        name, email address and profile picture with us, and we store the link to your Google account. We only request
+        basic profile and email scopes and never see your Google password.
       </p>
       <h3>Profile</h3>
       <p>
@@ -71,8 +78,9 @@ export default function PrivacyPage() {
           profile when you click Autofill (or when you turn on auto-continue for multi-step forms).
         </li>
         <li>
-          <strong>storage and cookies:</strong> to keep you signed in and to sync your session with the {SITE_NAME} web
-          app (required by our authentication provider, Clerk).
+          <strong>storage:</strong> to keep the extension signed in. When you connect the extension from the{" "}
+          {SITE_NAME} website, it receives a session token for your account that is kept in the extension&apos;s own
+          storage (not readable by websites) until you sign out or disconnect it from Account settings.
         </li>
         <li>
           <strong>sidePanel:</strong> to show the {SITE_NAME} panel next to the page you are applying on.
@@ -126,16 +134,18 @@ export default function PrivacyPage() {
       <h2>Where your data is stored (service providers)</h2>
       <ul>
         <li>
-          <strong>Clerk</strong> — authentication and account management.
-        </li>
-        <li>
-          <strong>Neon</strong> — PostgreSQL database for your profile, resume content, and application tracker.
+          <strong>Neon</strong> — PostgreSQL database for your account, sessions, profile, resume content, and application
+          tracker.
         </li>
         <li>
           <strong>Vercel</strong> — hosting of the web app and API, and Vercel Blob private storage for resume files.
         </li>
         <li>
-          <strong>Google</strong> — Gemini API for the AI features described above.
+          <strong>Google</strong> — Gemini API for the AI features described above, and Google OAuth if you choose to
+          sign in with Google.
+        </li>
+        <li>
+          <strong>Resend</strong> — delivery of account emails (email verification and password reset), when enabled.
         </li>
       </ul>
       <p>
@@ -147,7 +157,8 @@ export default function PrivacyPage() {
       <p>
         We keep your data while your account is active. You can edit your profile and delete tracked applications in the
         dashboard at any time. To delete your account and all associated data (profile, resumes, resume files, and
-        applications), email us at {CONTACT_EMAIL} and we will delete it within 30 days. Rate-limit counters are deleted
+        applications), use <strong>Delete account</strong> in Account settings — it takes effect immediately — or email us
+        at {CONTACT_EMAIL} and we will delete it within 30 days. Rate-limit counters are deleted
         automatically; the shared autofill cache contains no personal data.
       </p>
 

@@ -1,19 +1,43 @@
 import type { DetectedField, Profile } from "@job-jet/shared";
 import { safeDownloadFilename } from "./download-name";
+import { API_BASE_URL } from "./config";
+import { AuthExpiredError, clearAuth, NotConnectedError } from "./auth";
 
-const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
+const SYNC_HOST = API_BASE_URL;
+
+type TokenGetter = () => Promise<string | null>;
+
+/**
+ * fetch() against the Job Jet API with the extension's bearer token. A 401
+ * means the session was revoked or expired server-side: the stored token is
+ * cleared (the side panel reacts via chrome.storage.onChanged and shows
+ * "Reconnect") and AuthExpiredError is thrown.
+ */
+export async function authedFetch(
+  getToken: TokenGetter,
+  path: string,
+  init: RequestInit = {},
+  onUnauthorized: () => Promise<void> = () => clearAuth()
+): Promise<Response> {
+  const token = await getToken();
+  if (!token) throw new NotConnectedError();
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${SYNC_HOST}${path}`, { ...init, headers, credentials: "omit" });
+  if (res.status === 401) {
+    await onUnauthorized();
+    throw new AuthExpiredError();
+  }
+  return res;
+}
 
 /** Fetches the signed-in user's saved profile from the web app's API.
  *  Cross-origin (chrome-extension:// -> the web app's origin) — the
  *  session token is passed as a Bearer header since there's no shared
- *  cookie jar between the two origins; see src/lib/cors.ts on the backend. */
-export async function fetchProfile(getToken: () => Promise<string | null>): Promise<Profile | null> {
-  const token = await getToken();
-  if (!token) throw new Error("Not signed in");
-
-  const res = await fetch(`${SYNC_HOST}/api/profile`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+ *  cookie jar between the two origins; see src/lib/auth.ts here and
+ *  src/lib/auth/origins.ts on the backend. */
+export async function fetchProfile(getToken: TokenGetter): Promise<Profile | null> {
+  const res = await authedFetch(getToken, "/api/profile");
   if (!res.ok) throw new Error(`Couldn't load your profile (${res.status})`);
 
   const body = await res.json();
@@ -27,15 +51,12 @@ type ResumeRecord = { id: string; fileName: string };
  *  download the actual PDF next — the tailor endpoint doesn't return the
  *  file bytes directly). */
 export async function tailorResume(
-  getToken: () => Promise<string | null>,
+  getToken: TokenGetter,
   jobDescription: string
 ): Promise<ResumeRecord> {
-  const token = await getToken();
-  if (!token) throw new Error("Not signed in");
-
-  const res = await fetch(`${SYNC_HOST}/api/resume/tailor`, {
+  const res = await authedFetch(getToken, "/api/resume/tailor", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jobDescription }),
   });
   const body = await res.json().catch(() => ({}));
@@ -58,16 +79,11 @@ export async function tailorResume(
  *  and click it themselves is an unnecessary extra step for something
  *  they came here specifically to attach to a form. */
 export async function downloadResume(
-  getToken: () => Promise<string | null>,
+  getToken: TokenGetter,
   resumeId: string,
   fileName: string
 ): Promise<void> {
-  const token = await getToken();
-  if (!token) throw new Error("Not signed in");
-
-  const res = await fetch(`${SYNC_HOST}/api/resume/${encodeURIComponent(resumeId)}/download`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await authedFetch(getToken, `/api/resume/${encodeURIComponent(resumeId)}/download`);
   if (!res.ok) throw new Error(`Couldn't download the resume (${res.status})`);
 
   const blob = await res.blob();
@@ -93,17 +109,14 @@ export async function downloadResume(
  *  profile yet, network hiccup) — this tier supplements tiers 1/2, it
  *  should never be able to make Autofill itself fail. */
 export async function mapFieldsWithLLM(
-  getToken: () => Promise<string | null>,
+  getToken: TokenGetter,
   domain: string,
   fields: DetectedField[]
 ): Promise<{ selector: string; value: string }[]> {
   try {
-    const token = await getToken();
-    if (!token) return [];
-
-    const res = await fetch(`${SYNC_HOST}/api/autofill/map`, {
+    const res = await authedFetch(getToken, "/api/autofill/map", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ domain, fields }),
     });
     if (!res.ok) return [];
@@ -128,14 +141,13 @@ type ApplicationUpsert = {
  *  tailored resume), not on every page visit, so the tracker reflects
  *  applications actually worked on rather than every job page glanced at. */
 export async function upsertApplication(
-  getToken: () => Promise<string | null>,
+  getToken: TokenGetter,
   data: ApplicationUpsert
 ): Promise<void> {
-  const token = await getToken();
-  if (!token) return; // best-effort — never block the actual feature on this
-  await fetch(`${SYNC_HOST}/api/applications`, {
+  // Best-effort — never block the actual feature on this.
+  await authedFetch(getToken, "/api/applications", {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   }).catch(() => {});
 }

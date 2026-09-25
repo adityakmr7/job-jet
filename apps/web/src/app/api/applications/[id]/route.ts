@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@/db";
 import { applications } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
 import { ApplicationPatchSchema, UuidSchema, validationErrorBody } from "@/lib/validation";
@@ -16,8 +16,7 @@ export async function OPTIONS(req: Request) {
 
 export const PATCH = withErrorHandling("api/applications/[id] PATCH", async (req: Request, { params }: RouteContext) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const { id } = await params;
   if (!UuidSchema.safeParse(id).success) {
@@ -52,8 +51,7 @@ export const PATCH = withErrorHandling("api/applications/[id] PATCH", async (req
 
 export const DELETE = withErrorHandling("api/applications/[id] DELETE", async (req: Request, { params }: RouteContext) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const { id } = await params;
   if (!UuidSchema.safeParse(id).success) {

@@ -1,25 +1,28 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 
-// Everything under /api is used by the extension and must be authenticated;
-// the rest of the app (marketing, sign-in, /privacy, /terms) stays public by
-// default — the legal pages must stay reachable signed-out (Chrome Web Store
-// requires a public privacy policy URL).
-const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/api(.*)"]);
+/**
+ * Fast, optimistic redirect for signed-out visitors to the dashboard and
+ * the extension-connect page: only checks that a session cookie exists (no
+ * DB call). It is NOT the security boundary — every page and API route
+ * verifies the session server-side (requirePageUser / requireUser), and
+ * /api routes answer 401 JSON themselves (the extension uses bearer tokens,
+ * which this cookie check can't see).
+ */
+const PROTECTED_PREFIXES = ["/dashboard", "/extension-connect"];
 
-export default clerkMiddleware(async (auth, req) => {
-  // CORS preflight from the extension (chrome-extension://) carries no
-  // auth — let it through so the route's own OPTIONS handler can answer
-  // with the right Access-Control-* headers. The real request right after
-  // still goes through auth.protect() below.
-  if (req.method === "OPTIONS") return;
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+export function proxy(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
+  if (!PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
   }
-});
+  if (getSessionCookie(req)) return NextResponse.next();
+  const url = req.nextUrl.clone();
+  url.pathname = "/sign-in";
+  url.search = `?redirect=${encodeURIComponent(pathname + search)}`;
+  return NextResponse.redirect(url);
+}
 
 export const config = {
-  matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
-  ],
+  matcher: ["/dashboard/:path*", "/extension-connect"],
 };

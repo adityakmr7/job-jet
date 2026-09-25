@@ -8,7 +8,7 @@ const POINTS = [
   "A tracker that updates itself",
 ];
 
-/** Split-screen shell for Clerk's sign-in / sign-up widgets. */
+/** Split-screen shell for the sign-in, sign-up and password pages. */
 export function AuthLayout({ children, title }: { children: ReactNode; title: string }) {
   return (
     <div className="flex-1 grid lg:grid-cols-2">
@@ -38,7 +38,7 @@ export function AuthLayout({ children, title }: { children: ReactNode; title: st
         <div className="relative mb-8 lg:hidden">
           <Logo size={32} />
         </div>
-        <div className="relative">{children}</div>
+        <div className="relative w-full max-w-[420px]">{children}</div>
       </main>
     </div>
   );

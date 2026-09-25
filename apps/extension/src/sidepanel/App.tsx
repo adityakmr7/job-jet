@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useUser, UserButton } from "@clerk/chrome-extension";
 import type { DetectedField, Profile } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
 import { fetchProfile, tailorResume, downloadResume, upsertApplication, mapFieldsWithLLM } from "../lib/api";
@@ -7,8 +6,11 @@ import { runAutofillMapping, matches, NEVER_FILL } from "../lib/autofill-map";
 import { fillFieldsInMainWorld } from "../lib/main-world-fill";
 import { matchSkills } from "../lib/skill-match";
 import logoUrl from "../assets/logo-mark-small.svg";
+import { API_BASE_URL } from "../lib/config";
+import { useAuth } from "./useAuth";
+import { AccountMenu } from "./AccountMenu";
 
-const SYNC_HOST = import.meta.env.VITE_CLERK_SYNC_HOST;
+const SYNC_HOST = API_BASE_URL;
 const AUTO_CONTINUE_POLL_MS = 1500;
 
 async function getActiveTab(): Promise<{ id?: number; hostname?: string; url?: string }> {
@@ -44,13 +46,11 @@ async function sendToContentScript<T = unknown>(message: ExtensionMessage): Prom
   return chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
 }
 
-function openSignIn() {
-  chrome.tabs.create({ url: `${SYNC_HOST}/sign-in` });
-}
-
 export function App() {
-  const { isLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
+  const { state: auth, getToken, connect, signOut } = useAuth();
+  const isLoaded = auth.status !== "loading";
+  const isSignedIn = auth.status === "signed-in";
+  const [connecting, setConnecting] = useState(false);
   const [fields, setFields] = useState<DetectedField[]>([]);
   const [jobDescription, setJobDescription] = useState("");
   const [jobTitle, setJobTitle] = useState<string | undefined>(undefined);
@@ -303,7 +303,7 @@ export function App() {
   // Auto-continue: while armed, poll for fields that weren't on the page
   // last time we looked (a new wizard step) and fill just those. Poll-based
   // rather than a MutationObserver-driven message from the content script
-  // because the actual fetch-profile-and-map step needs the Clerk session,
+  // because the actual fetch-profile-and-map step needs the auth token,
   // which only exists in this side panel's React context — the content
   // script can detect new fields but can't act on them by itself. Needs
   // the panel to stay open; there's no background-auth path yet.
@@ -383,23 +383,45 @@ export function App() {
   }
 
   if (!isSignedIn) {
+    const expired = auth.status === "signed-out" && auth.reason === "expired";
+    const handleConnect = async () => {
+      setConnecting(true);
+      try {
+        await connect();
+      } finally {
+        setTimeout(() => setConnecting(false), 1500);
+      }
+    };
     return (
       <div className="panel">
         <header className="topbar">
           <Brand />
         </header>
         <section className="card hero">
-          <h1>Apply in minutes, not evenings.</h1>
-          <p className="muted">Sign in to fill applications from your profile and tailor your resume to each job.</p>
-          <ul className="checklist">
-            <li>Autofill forms on any careers site</li>
-            <li>Tailored resume PDFs in seconds</li>
-            <li>Every application tracked for you</li>
-          </ul>
-          <button className="btn btn-primary" onClick={openSignIn}>
-            Sign in to Job Jet
+          <h1>{expired ? "Welcome back." : "Apply in minutes, not evenings."}</h1>
+          <p className="muted">
+            {expired
+              ? "Your session ended (you signed out elsewhere or it expired). Reconnect to keep filling applications."
+              : "Connect your Job Jet account to fill applications from your profile and tailor your resume to each job."}
+          </p>
+          {!expired && (
+            <ul className="checklist">
+              <li>Autofill forms on any careers site</li>
+              <li>Tailored resume PDFs in seconds</li>
+              <li>Every application tracked for you</li>
+            </ul>
+          )}
+          <button className="btn btn-primary" onClick={handleConnect} disabled={connecting}>
+            {connecting ? <Spinner /> : null}
+            {expired ? "Reconnect to Job Jet" : "Connect to Job Jet"}
           </button>
-          <p className="hint">Opens Job Jet in a new tab. Come back here once you&apos;re signed in.</p>
+          <p className="hint">
+            Opens Job Jet in a new tab. Sign in (or{" "}
+            <a href={`${SYNC_HOST}/sign-up`} target="_blank" rel="noopener noreferrer">
+              create a free account
+            </a>
+            ), then click <strong>Connect extension</strong>.
+          </p>
         </section>
       </div>
     );
@@ -412,7 +434,7 @@ export function App() {
     <div className="panel">
       <header className="topbar">
         <Brand />
-        <UserButton />
+        <AccountMenu user={auth.user} dashboardUrl={`${SYNC_HOST}/dashboard`} onSignOut={signOut} />
       </header>
 
       <section className="card" aria-labelledby="page-heading">

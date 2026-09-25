@@ -1,19 +1,21 @@
-import { UserButton } from "@clerk/nextjs";
 import { Puzzle } from "lucide-react";
 import { Logo } from "./Logo";
 import { DashboardNav } from "./DashboardNav";
 import { EXTENSION_URL } from "@/lib/site-config";
+import { UserMenu } from "./auth/UserMenu";
 
 export function DashboardShell({
   title,
   description,
   email,
+  name,
   actions,
   children,
 }: {
   title: string;
   description: string;
   email: string;
+  name?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -46,10 +48,13 @@ export function DashboardShell({
           </div>
         </div>
         <div className="px-5 py-4 border-t border-border flex items-center gap-3">
-          <UserButton />
-          <span className="text-xs text-muted truncate" title={email}>
-            {email}
-          </span>
+          <UserMenu email={email} name={name} placement="up" />
+          <div className="min-w-0">
+            {name && <p className="text-[13px] font-medium truncate">{name}</p>}
+            <p className="text-xs text-muted truncate" title={email}>
+              {email}
+            </p>
+          </div>
         </div>
         </div>
       </aside>
@@ -58,7 +63,7 @@ export function DashboardShell({
         <header className="md:hidden sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-border">
           <div className="flex items-center justify-between px-4 h-14">
             <Logo size={24} href="/dashboard" />
-            <UserButton />
+            <UserMenu email={email} name={name} />
           </div>
           <DashboardNav variant="tabs" />
         </header>

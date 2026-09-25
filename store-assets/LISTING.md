@@ -81,19 +81,28 @@ Job Jet is free while it's in beta. You'll need a free Job Jet account.
 | --- | --- |
 | Host permission `<all_urls>` | Job application forms are hosted on thousands of different company careers sites and applicant-tracking domains, so there's no fixed list of sites. The content script needs to run on the page the user is viewing to detect an application form and read its field labels and the job description. Page content is only sent to our server when the user clicks Autofill or Tailor resume. |
 | `scripting` | Fills the application form on the active tab with the user's profile values, and only after the user clicks Autofill. We inject a function into the page's main world so frameworks such as React register the typed values. No remote code is executed. |
-| `storage` | Keeps the user signed in. Our authentication provider (Clerk) stores the session in extension storage. |
-| `cookies` | Syncs the sign-in session between the Job Jet website and the extension (Clerk's session sync for browser extensions), so users sign in once. |
+| `storage` | Keeps the user signed in: stores the extension's Job Jet session token (received when the user connects the extension on the Job Jet website) and a short-lived one-time value used during that connection. No browsing data is stored. |
 | `sidePanel` | The extension's user interface is a side panel shown next to the job application. |
 | `downloads` | Saves the tailored resume PDF the user generated to their Downloads folder, so they can attach it to the application form. |
 
 **Remote code:** No. All code is packaged with the extension.
+
+**`externally_connectable`** (manifest key, not a permission; no justification
+field, but reviewers may ask): only the Job Jet website origin
+(`https://<your-domain>/*`) may send the extension a message, and only to hand
+over the user's session token after they click **Connect extension** on
+`/extension-connect`. The extension verifies the sender page and a one-time
+value before accepting it. No other website can message the extension.
+
+The `cookies` permission from earlier builds is gone (0.3.0). Removing a
+permission doesn't trigger extra review or a re-prompt for users.
 
 ### Data usage disclosures
 
 Tick these data types:
 
 - **Personally identifiable information:** name, email, phone and address/location from the user's profile.
-- **Authentication information:** session tokens handled by Clerk.
+- **Authentication information:** the Job Jet session token stored in extension storage (sent only to the Job Jet API).
 - **Website content:** form field labels and job-description text from the page, sent only when the user uses a feature.
 - **User activity:** URLs of job pages the user autofills or tailors a resume for, used for the application tracker.
 

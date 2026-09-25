@@ -1,18 +1,16 @@
 import { loadEnv, type ConfigEnv } from "vite";
 import { defineManifest } from "@crxjs/vite-plugin";
 import pkg from "./package.json";
-import { frontendApiFromPublishableKey } from "./src/lib/clerk";
+import { externallyConnectableMatch } from "./env.config";
 
 export default defineManifest((configEnv: ConfigEnv) => {
   const env = loadEnv(configEnv.mode, process.cwd(), "VITE_");
-  const publishableKey = env.VITE_CLERK_PUBLISHABLE_KEY;
-
-  // `<all_urls>` (needed anyway for job-page detection on arbitrary sites)
-  // already covers the Clerk sync host + Frontend API for host_permissions
-  // purposes, but Clerk's SDK validates the key exists at all — computing
-  // it here documents the actual dependency even though it's redundant
-  // with <all_urls> today.
-  if (publishableKey) frontendApiFromPublishableKey(publishableKey);
+  const apiBaseUrl = env.VITE_API_BASE_URL;
+  // Only the Job Jet web app may message the extension (the
+  // /extension-connect token handoff). Production builds refuse localhost
+  // (env.config.ts), so dev origins never ship in a release. Without an
+  // API URL (vitest loading this config) nothing is external-connectable.
+  const externalMatches = apiBaseUrl ? [externallyConnectableMatch(apiBaseUrl)] : [];
 
   return {
     manifest_version: 3,
@@ -74,8 +72,10 @@ export default defineManifest((configEnv: ConfigEnv) => {
       default_path: "src/sidepanel/index.html",
     },
     // Permission justifications (also in store-assets/LISTING.md and SECURITY.md):
-    // storage: required by @clerk/chrome-extension unconditionally.
-    // cookies: required because we use syncHost (session sync with the web app).
+    // storage: the extension's session token (chrome.storage.local) and the
+    //   one-time connect nonce (chrome.storage.session) — see src/lib/auth.ts.
+    // cookies was dropped with Clerk: auth is a bearer token handed over by
+    //   the web app's /extension-connect page, no cookie access needed.
     // scripting: fills React/Vue-controlled inputs from the MAIN world
     //   (see src/lib/main-world-fill.ts) — only on the tab the user is
     //   actively autofilling, only after they click Autofill.
@@ -88,8 +88,11 @@ export default defineManifest((configEnv: ConfigEnv) => {
     // permission below, which the content script needs anyway to detect
     // application forms on arbitrary career sites (there's no fixed list
     // of ATS domains to narrow it to — see ARCHITECTURE.md).
-    permissions: ["storage", "cookies", "scripting", "sidePanel", "downloads"],
+    permissions: ["storage", "scripting", "sidePanel", "downloads"],
     host_permissions: ["<all_urls>"],
+    // Web pages can message the extension only from the Job Jet web app, and
+    // no other extension can (ids: [] would be the default anyway; explicit).
+    externally_connectable: { matches: externalMatches, ids: [] },
     // Explicit MV3 policy: no remote or inline code in extension pages.
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'self'",

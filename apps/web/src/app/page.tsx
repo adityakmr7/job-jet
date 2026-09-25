@@ -1,4 +1,4 @@
-import { Show } from "@clerk/nextjs";
+import { Show } from "@/components/auth/Show";
 import {
   ArrowRight,
   ClipboardList,

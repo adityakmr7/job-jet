@@ -61,8 +61,8 @@ export default function TermsPage() {
 
       <h2>Third-party services</h2>
       <p>
-        The Service relies on third parties including Clerk (authentication), Neon (database), Vercel (hosting and file
-        storage), and Google Gemini (AI processing). Their availability and terms are outside our control.
+        The Service relies on third parties including Neon (database), Vercel (hosting and file storage), Google
+        (Gemini AI processing and, if you use it, Google sign-in) and Resend (account emails). Their availability and terms are outside our control.
       </p>
 
       <h2>Open-source code</h2>

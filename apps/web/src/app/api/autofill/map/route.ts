@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { computeFieldSignature, type Profile } from "@job-jet/shared";
 import { getDb } from "@/db";
 import { profiles, fieldMappings } from "@/db/schema";
-import { getOrCreateUser } from "@/lib/get-or-create-user";
+import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { resolveProfileFieldPath } from "@/lib/field-paths";
 import { matchFieldsToProfilePaths, type FieldForPrompt } from "@/lib/field-mapping-llm";
@@ -44,8 +44,7 @@ export async function OPTIONS(req: Request) {
  */
 export const POST = withErrorHandling("api/autofill/map POST", async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+  const user = await requireUser(req);
 
   const parsed = AutofillMapRequestSchema.safeParse(await readJsonBody(req));
   if (!parsed.success) {

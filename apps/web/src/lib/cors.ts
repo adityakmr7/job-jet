@@ -14,7 +14,8 @@ import { parseList, type EnvSource } from "./env";
  *  - in production, no extension origin is allowed (fail closed).
  *
  * CORS is defense in depth here — every API route still requires a valid
- * Clerk session token.
+ * session, and bearer tokens are only honoured from these same extension
+ * origins (see src/lib/auth/origins.ts).
  */
 
 const EXTENSION_ORIGIN_RE = /^chrome-extension:\/\/([a-p]{32})$/;
