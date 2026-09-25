@@ -6,27 +6,208 @@ a resume tailored to the specific job description via AI.
 
 Full system design, data model, and the reasoning behind what's built (and
 deliberately not built) is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Release notes are in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Structure
 
 ```
 apps/
-  web/         Next.js app — auth, dashboard, all backend API routes
+  web/         Next.js app — auth, dashboard, legal pages, all backend API routes
   extension/   Chrome MV3 extension (Vite + CRXJS + React), side panel UI
 packages/
   shared/      Shared TS types/zod schemas: Profile, Resume, Application, FieldMapping
+scripts/       Repo-level tooling (extension release zip)
 ```
 
 ## Stack
 
 - **Extension**: Manifest V3, Vite + `@crxjs/vite-plugin`, React side panel.
-- **Backend**: Next.js (App Router) API routes on Vercel.
-- **Auth**: Clerk — has an official `@clerk/chrome-extension` SDK that syncs
-  the web app's session into the extension. Multi-user from day one.
-- **Database**: Neon Postgres (via Drizzle).
-- **File storage**: Vercel Blob (uploaded resumes + generated tailored PDFs).
-- **AI**: AI SDK, using the Google provider against a free Gemini API key for
-  dev, behind an `AI_PROVIDER` abstraction so it's a one-line swap later.
+- **Backend**: Next.js 16 (App Router) API routes on Vercel.
+- **Auth**: Clerk — the official `@clerk/chrome-extension` SDK syncs the web
+  app's session into the extension. Multi-user from day one.
+- **Database**: Neon Postgres via Drizzle ORM, with SQL migrations in
+  `apps/web/drizzle`.
+- **File storage**: Vercel Blob, private store (uploaded resumes + generated
+  tailored PDFs).
+- **AI**: AI SDK with the Google provider (`gemini-2.5-flash`). The provider is
+  isolated in `apps/web/src/lib/ai.ts` (`getModel()`), so swapping models or
+  providers is a one-file change.
+
+## Getting started
+
+Requirements: **Node.js 22+** (see `.nvmrc`; `nvm use`) and npm.
+
+```bash
+npm ci
+
+# 1. Web app / API — http://localhost:3001 (pinned; 3000 is often taken)
+cp apps/web/.env.example apps/web/.env.local   # fill in values (or `vercel env pull`)
+npm run db:migrate --workspace=apps/web        # create tables (new database)
+npm run dev:web
+
+# 2. Extension
+cp apps/extension/.env.example apps/extension/.env.development   # dev section
+npm run dev:extension
+```
+
+Then load `apps/extension/dist` as an unpacked extension in
+`chrome://extensions` (Developer mode on). After a rebuild, click the
+extension's reload icon — Chrome doesn't pick up on-disk changes to an
+already-loaded unpacked extension on its own.
+
+For session sync, register the extension's origin
+(`chrome-extension://<id>`, shown on `chrome://extensions`) in Clerk's
+`allowed_origins`, and keep `VITE_CLERK_SYNC_HOST` matched to the port
+`npm run dev:web` actually binds to.
+
+## Environment variables
+
+### Web (`apps/web/.env.example`)
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Neon Postgres connection string |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini API key (resume parsing, tailoring, autofill matching) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Clerk auth |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob (private store) |
+| `ALLOWED_EXTENSION_IDS` | Comma-separated Chrome extension IDs allowed by CORS. Empty = any extension in dev, **none in production** |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Contact address shown on `/privacy` and `/terms` |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | Optional: `/sign-in`, `/sign-up` |
+
+Secrets are read lazily at request time, so `next build` works without them.
+
+### Extension (`apps/extension/.env.example`)
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Same publishable key as the web app |
+| `VITE_CLERK_SYNC_HOST` | Web app origin: Clerk sync host **and** API base URL; its host is excluded from job detection |
+| `JOBJET_ALLOW_DEV_CONFIG` | Optional, not bundled: `true` downgrades production checks to warnings |
+
+The build **fails** if a required value is missing or malformed. Production
+builds (`npm run build`, mode `production`, reads `.env.production`) also fail
+if the backend is localhost / not https or the Clerk key is `pk_test_`. Use
+`npm run build:dev --workspace=apps/extension` (reads `.env.development`) for
+a local unpacked build.
+
+## Scripts
+
+Run from the repo root:
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev:web` / `npm run dev:extension` | Dev servers |
+| `npm run lint` | ESLint in every workspace |
+| `npm run typecheck` | `tsc --noEmit` everywhere (`next typegen` first for web) |
+| `npm test` | Vitest unit tests in every workspace |
+| `npm run build:web` / `npm run build:extension` | Production builds |
+| `npm run release:extension` | Production extension build + Chrome Web Store zip in `release/` |
+| `npm run format` / `npm run format:check` | Prettier (not enforced in CI yet) |
+| `npm run test:fixtures` | Serve the detection fixture pages on :4000 |
+
+Database scripts (`--workspace=apps/web`): `db:generate`, `db:migrate`,
+`db:migrate:env`, `db:baseline`, `db:studio`, and `db:push` (dev only).
+
+## Testing
+
+`npm test` runs Vitest in each workspace:
+
+- `apps/extension/tests` (jsdom) — job-page detection against the checked-in
+  fixture pages, own-app exclusion, heuristic autofill mapping, the
+  Greenhouse/Lever/Ashby adapters against field data captured from live
+  postings, field collection (labels, honeypots, shadow DOM), and build-env
+  validation.
+- `apps/web/tests` — CORS, request validation and size limits, rate limiting,
+  error handling, field-path resolution, and the AI-output merge logic
+  (the AI SDK is mocked; no network or database needed).
+- `packages/shared/tests` — zod schemas and field signatures.
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and both builds
+on every push and pull request to `main`.
+
+### Manual testing against fixture pages
+
+Real ATS sites are slow and inconsistent to test against repeatedly, so
+`apps/extension/test-fixtures/` has local pages exercising the detection
+heuristic and autofill directly:
+
+```bash
+npm run test:fixtures   # serves http://localhost:4000
+```
+
+- `/careers/senior-frontend-engineer/apply/` — a single-step job
+  application form (positive case) — the floating button should appear,
+  and Autofill should fill most text/select fields from your saved profile.
+- `/careers/product-manager/apply/` — a 5-step wizard. Fields only exist in
+  the DOM for the currently active step (not just CSS-hidden), and the URL
+  hash changes per step — the harder, more realistic case, closer to how
+  real SPA-driven ATS wizards behave. Re-open the side panel (or click
+  Autofill again) after each "Next" to fill that step's fields.
+- `/about/` — a plain content page (negative control) — the button should
+  not appear here.
+
+## Database and migrations
+
+The schema lives in `apps/web/src/db/schema.ts`; SQL migrations are generated
+into `apps/web/drizzle/`.
+
+- Change the schema, then `npm run db:generate --workspace=apps/web` and
+  commit the new migration.
+- Apply migrations with `npm run db:migrate --workspace=apps/web` (uses
+  `.env.local`) or `DATABASE_URL=... npm run db:migrate:env --workspace=apps/web`.
+- **Production uses `db:migrate`, not `db:push`.** `db:push` is only for
+  throwaway local databases.
+
+**Existing database created with `db:push` (one-time):** it already has the
+tables from `0000_initial_schema`, so mark that migration as applied instead
+of running it, then migrate:
+
+```bash
+cd apps/web
+DATABASE_URL=... node scripts/db-baseline.mjs   # or: npm run db:baseline (uses .env.local)
+DATABASE_URL=... npm run db:migrate:env         # applies 0001_add_rate_limits and later
+```
+
+`db-baseline.mjs` refuses to run on an empty database or one that already
+has migration history.
+
+## Deployment
+
+**Web (Vercel):** the Vercel project's Root Directory should be `apps/web`. Set every variable from
+`apps/web/.env.example` in the Vercel project (production values: `pk_live_`/
+`sk_live_` Clerk keys, `ALLOWED_EXTENSION_IDS` with the Chrome Web Store
+extension ID, `NEXT_PUBLIC_CONTACT_EMAIL`). Run migrations against the
+production database before (or right after) deploying a release that
+includes a new migration.
+
+**Extension (Chrome Web Store):** create `apps/extension/.env.production`
+with `pk_live_…` and the deployed `https://` web app URL, run
+`npm run release:extension`, and upload `release/job-jet-extension-v<version>.zip`.
+The store listing needs the public privacy policy URL
+(`https://<your-domain>/privacy`). After the first upload, add the store
+extension ID to `ALLOWED_EXTENSION_IDS` and to Clerk's `allowed_origins`.
+
+## Releasing
+
+1. Bump `version` in `apps/extension/package.json` (the manifest version comes
+   from it) and keep `apps/web`, `packages/shared` and the root in sync.
+2. Move `[Unreleased]` entries in `CHANGELOG.md` under the new version.
+3. Open a PR; merge when CI is green.
+4. Tag the merge commit (`git tag v0.1.0 && git push origin v0.1.0`) and
+   create a GitHub release from the changelog section.
+5. Run migrations on production, deploy the web app, then
+   `npm run release:extension` and upload the zip to the Chrome Web Store.
+
+## Security notes
+
+- AI endpoints are rate-limited per user (Postgres-backed; see
+  `apps/web/src/lib/rate-limit.ts`) and all JSON bodies are size-capped and
+  zod-validated (`apps/web/src/lib/validation.ts`).
+- The API only reflects CORS for extension IDs in `ALLOWED_EXTENSION_IDS`;
+  every route still requires a Clerk session.
+- The AI never produces values typed into forms: autofill's LLM tier only
+  picks a key from an allow-list, and tailoring can only reword existing
+  content — both enforced in code.
 
 ## How detection works
 
@@ -74,7 +255,7 @@ security, so resume/file fields are never auto-filled — the side panel
 message says so explicitly. A `DataTransfer` workaround exists for some
 sites but is not implemented yet.
 
-## Roadmap
+## Roadmap / history
 
 - [x] Repo scaffold: monorepo, shared types, extension detection heuristic +
       floating button + side panel shell, Next.js app.
@@ -125,7 +306,7 @@ sites but is not implemented yet.
 - [x] Autofill engine v1 (heuristic tier) — see above. Code complete,
       type-checks, builds; **not yet live-verified** (Chrome caches a
       loaded unpacked extension — needs a manual reload after each
-      rebuild, which can't be done from here; see "Reload needed" below).
+      rebuild, which can't be done from here; see "Getting started").
 - [x] Original logo + brand identity (`apps/web/public/logo-mark.svg`,
       procedurally-generated matching extension icons at every size,
       Next.js app-icon/apple-icon conventions). Not derived from any other
@@ -163,55 +344,6 @@ sites but is not implemented yet.
       copilot — these need a real job-data source or partnership Job Jet
       doesn't have; not fabricating fake data to fill this in.
 
-### Reload needed to test recent changes
+## License
 
-Reload the extension in `chrome://extensions` (its card's reload icon)
-after pulling changes to `apps/extension` — Chrome caches an already-loaded
-unpacked extension and won't pick up on-disk changes on its own. As of the
-auto-continue and application-tracker work, that's the one thing not yet
-live-verified through the actual extension UI (the backend side of the
-tracker is fully verified independently — see `docs/ARCHITECTURE.md`).
-
-## Testing the extension against fixture pages
-
-Real ATS sites are slow and inconsistent to test against repeatedly, so
-`apps/extension/test-fixtures/` has local pages exercising the detection
-heuristic and autofill directly:
-
-```bash
-npm run test:fixtures   # serves http://localhost:4000
-```
-
-- `/careers/senior-frontend-engineer/apply/` — a single-step job
-  application form (positive case) — the floating button should appear,
-  and Autofill should fill most text/select fields from your saved profile.
-- `/careers/product-manager/apply/` — a 5-step wizard. Fields only exist in
-  the DOM for the currently active step (not just CSS-hidden), and the URL
-  hash changes per step — the harder, more realistic case, closer to how
-  real SPA-driven ATS wizards behave. Re-open the side panel (or click
-  Autofill again) after each "Next" to fill that step's fields.
-- `/about/` — a plain content page (negative control) — the button should
-  not appear here.
-
-## Dev
-
-```bash
-npm install
-
-# Backend (http://localhost:3001 — pinned; port 3000 may already be taken
-# by something else on your machine). apps/web/.env.local already has
-# Clerk/Neon/Blob credentials pulled from Vercel (vercel env pull to refresh).
-npm run dev:web
-
-# Extension — then load apps/extension/dist as an unpacked extension
-# in chrome://extensions (Developer mode on). After any rebuild, click
-# that extension's reload icon in chrome://extensions — Chrome doesn't
-# pick up on-disk changes to an already-loaded unpacked extension on its own.
-npm run dev:extension
-```
-
-If you change `apps/extension/.env.development`'s `VITE_CLERK_SYNC_HOST`
-away from `http://localhost:3001`, keep it matched to whatever port
-`npm run dev:web` actually binds to (it prints the real port on startup).
-
-Schema changes: edit `apps/web/src/db/schema.ts`, then `npm run db:push --workspace=apps/web`.
+[MIT](LICENSE) © 2026 Aditya Kumar
