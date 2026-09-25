@@ -10,7 +10,17 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     const tiny = this.getAttribute("data-test-size") === "tiny";
     const size = tiny ? 1 : 200;
-    return { width: size, height: tiny ? 1 : 30, top: 0, left: 0, right: size, bottom: 30, x: 0, y: 0, toJSON() {} } as DOMRect;
+    return {
+      width: size,
+      height: tiny ? 1 : 30,
+      top: 0,
+      left: 0,
+      right: size,
+      bottom: 30,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    } as DOMRect;
   });
 });
 

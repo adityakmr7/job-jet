@@ -1,0 +1,9 @@
+node_modules
+dist
+.next
+coverage
+package-lock.json
+apps/web/drizzle/meta
+apps/web/.agents
+.claude
+.agents

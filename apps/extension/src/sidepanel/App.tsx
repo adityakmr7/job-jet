@@ -302,6 +302,10 @@ export function App() {
       }
     }, AUTO_CONTINUE_POLL_MS);
     return () => clearInterval(interval);
+    // Deliberately keyed on autoContinue only: fillFields is recreated every
+    // render, and restarting the poll on each render would reset its timer.
+    // Everything it reads that changes over time is accessed via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoContinue]);
 
   async function handleGenerateResume() {

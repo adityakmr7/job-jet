@@ -6,6 +6,8 @@ describe("frontendApiFromPublishableKey", () => {
     expect(frontendApiFromPublishableKey(`pk_test_${btoa("fast-fox-1.clerk.accounts.dev$")}`)).toBe(
       "fast-fox-1.clerk.accounts.dev"
     );
-    expect(frontendApiFromPublishableKey(`pk_live_${btoa("clerk.jobjet.example.com$")}`)).toBe("clerk.jobjet.example.com");
+    expect(frontendApiFromPublishableKey(`pk_live_${btoa("clerk.jobjet.example.com$")}`)).toBe(
+      "clerk.jobjet.example.com"
+    );
   });
 });

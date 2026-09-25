@@ -31,9 +31,9 @@ describe("ProfileSchema", () => {
 
   it("rejects an invalid email or link URL", () => {
     expect(ProfileSchema.safeParse({ ...minimalProfile, email: "nope" }).success).toBe(false);
-    expect(
-      ProfileSchema.safeParse({ ...minimalProfile, links: [{ label: "Site", url: "not a url" }] }).success
-    ).toBe(false);
+    expect(ProfileSchema.safeParse({ ...minimalProfile, links: [{ label: "Site", url: "not a url" }] }).success).toBe(
+      false
+    );
   });
 
   it("requires fullName and email", () => {
@@ -133,7 +133,9 @@ describe("computeFieldSignature", () => {
   });
 
   it("prefers label, then placeholder, then name, then id", () => {
-    expect(computeFieldSignature({ label: "Email", placeholder: "p", name: "n", id: "i", type: "email" })).toBe("email::email");
+    expect(computeFieldSignature({ label: "Email", placeholder: "p", name: "n", id: "i", type: "email" })).toBe(
+      "email::email"
+    );
     expect(computeFieldSignature({ placeholder: "Your email", name: "n", type: "email" })).toBe("your email::email");
     expect(computeFieldSignature({ name: "question_123", id: "i", type: "text" })).toBe("question 123::text");
     expect(computeFieldSignature({ id: "only-id", type: "text" })).toBe("only id::text");

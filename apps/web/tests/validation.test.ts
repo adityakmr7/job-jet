@@ -21,8 +21,12 @@ describe("TailorRequestSchema", () => {
   it("rejects missing, blank, or oversized job descriptions", () => {
     expect(TailorRequestSchema.safeParse({}).success).toBe(false);
     expect(TailorRequestSchema.safeParse({ jobDescription: "   " }).success).toBe(false);
-    expect(TailorRequestSchema.safeParse({ jobDescription: "x".repeat(LIMITS.jobDescription + 1) }).success).toBe(false);
-    expect(TailorRequestSchema.safeParse({ jobDescription: "ok", company: "x".repeat(LIMITS.shortText + 1) }).success).toBe(false);
+    expect(TailorRequestSchema.safeParse({ jobDescription: "x".repeat(LIMITS.jobDescription + 1) }).success).toBe(
+      false
+    );
+    expect(
+      TailorRequestSchema.safeParse({ jobDescription: "ok", company: "x".repeat(LIMITS.shortText + 1) }).success
+    ).toBe(false);
   });
 });
 
@@ -37,7 +41,10 @@ describe("AutofillMapRequestSchema", () => {
     const many = Array.from({ length: LIMITS.autofillFields + 1 }, () => field);
     expect(AutofillMapRequestSchema.safeParse({ domain: "a.com", fields: many }).success).toBe(false);
     expect(
-      AutofillMapRequestSchema.safeParse({ domain: "a.com", fields: [{ ...field, label: "x".repeat(LIMITS.fieldLabel + 1) }] }).success
+      AutofillMapRequestSchema.safeParse({
+        domain: "a.com",
+        fields: [{ ...field, label: "x".repeat(LIMITS.fieldLabel + 1) }],
+      }).success
     ).toBe(false);
     expect(
       AutofillMapRequestSchema.safeParse({
@@ -52,7 +59,9 @@ describe("AutofillMapRequestSchema", () => {
 
 describe("Application schemas", () => {
   it("upsert: requires url, validates resumeId and status", () => {
-    expect(ApplicationUpsertSchema.safeParse({ url: "https://x.com/job", resumeId: UUID, status: "draft" }).success).toBe(true);
+    expect(
+      ApplicationUpsertSchema.safeParse({ url: "https://x.com/job", resumeId: UUID, status: "draft" }).success
+    ).toBe(true);
     expect(ApplicationUpsertSchema.safeParse({}).success).toBe(false);
     expect(ApplicationUpsertSchema.safeParse({ url: "https://x.com", resumeId: "123" }).success).toBe(false);
     expect(ApplicationUpsertSchema.safeParse({ url: "https://x.com", status: "hired" }).success).toBe(false);
@@ -80,7 +89,16 @@ describe("normalizeSiteKey", () => {
   });
 
   it("rejects non-hostnames and non-web schemes", () => {
-    for (const bad of ["", "   ", "localhost", "not a domain", "javascript:alert(1)", "ftp://files.example.com", "[::1]", "a".repeat(3000)]) {
+    for (const bad of [
+      "",
+      "   ",
+      "localhost",
+      "not a domain",
+      "javascript:alert(1)",
+      "ftp://files.example.com",
+      "[::1]",
+      "a".repeat(3000),
+    ]) {
       expect(normalizeSiteKey(bad)).toBeNull();
     }
   });

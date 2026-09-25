@@ -3,17 +3,17 @@ import { z } from "zod";
 import { getModel } from "./ai";
 import { ALLOWED_PROFILE_FIELD_PATHS, PROFILE_FIELD_PATH_DESCRIPTIONS } from "./field-paths";
 
-/** Local zod schema describing exactly what the LLM prompt sees (an
- *  index instead of a selector, no id) — intentionally narrower than
- *  @job-jet/shared's DetectedFieldSchema. */
-const FieldForPromptSchema = z.object({
-  index: z.number(),
-  label: z.string().optional(),
-  name: z.string().optional(),
-  placeholder: z.string().optional(),
-  type: z.string(),
-  options: z.array(z.string()).optional(),
-});
+/** What the LLM prompt sees for each field (an index instead of a
+ *  selector, no id) — intentionally narrower than @job-jet/shared's
+ *  DetectedField. */
+export type FieldForPrompt = {
+  index: number;
+  label?: string;
+  name?: string;
+  placeholder?: string;
+  type: string;
+  options?: string[];
+};
 
 const MatchResultSchema = z.object({
   matches: z.array(
@@ -26,8 +26,6 @@ const MatchResultSchema = z.object({
     })
   ),
 });
-
-export type FieldForPrompt = z.infer<typeof FieldForPromptSchema>;
 
 /**
  * Tier 3 of the autofill engine: for fields the heuristic + adapter tiers

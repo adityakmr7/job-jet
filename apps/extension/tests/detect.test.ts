@@ -38,7 +38,11 @@ describe("scoreFieldKeywords", () => {
 describe("detectJobApplication against fixture pages", () => {
   it("detects the single-page application form", () => {
     const doc = loadFixture("careers/senior-frontend-engineer/apply/index.html");
-    const result = detectJobApplication(doc, "http://localhost:4000/careers/senior-frontend-engineer/apply/", DEV_BACKEND);
+    const result = detectJobApplication(
+      doc,
+      "http://localhost:4000/careers/senior-frontend-engineer/apply/",
+      DEV_BACKEND
+    );
     expect(result.isJobApplication).toBe(true);
     expect(result.hasFileUpload).toBe(true);
     expect(result.confidence).toBeGreaterThanOrEqual(0.4);
@@ -96,6 +100,9 @@ describe("detectJobApplication host rules", () => {
     const doc = loadFixture("careers/senior-frontend-engineer/apply/index.html");
     expect(detectJobApplication(doc, "http://localhost:3001/dashboard", DEV_BACKEND).isJobApplication).toBe(false);
     expect(detectJobApplication(doc, "http://127.0.0.1:3001/dashboard", DEV_BACKEND).isJobApplication).toBe(false);
-    expect(detectJobApplication(doc, "http://localhost:4000/careers/senior-frontend-engineer/apply/", DEV_BACKEND).isJobApplication).toBe(true);
+    expect(
+      detectJobApplication(doc, "http://localhost:4000/careers/senior-frontend-engineer/apply/", DEV_BACKEND)
+        .isJobApplication
+    ).toBe(true);
   });
 });

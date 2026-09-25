@@ -7,7 +7,10 @@ const testKey = `pk_test_${btoa("fast-fox-1.clerk.accounts.dev$")}`;
 describe("validateExtensionEnv", () => {
   it("accepts a valid development config", () => {
     expect(
-      validateExtensionEnv({ VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "http://localhost:3001" }, "development")
+      validateExtensionEnv(
+        { VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "http://localhost:3001" },
+        "development"
+      )
     ).toEqual({ errors: [], warnings: [] });
   });
 
@@ -40,7 +43,10 @@ describe("validateExtensionEnv", () => {
     );
     expect(undecodable.errors.some((e) => e.includes("malformed"))).toBe(true);
 
-    const ftp = validateExtensionEnv({ VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "ftp://x.com" }, "development");
+    const ftp = validateExtensionEnv(
+      { VITE_CLERK_PUBLISHABLE_KEY: testKey, VITE_CLERK_SYNC_HOST: "ftp://x.com" },
+      "development"
+    );
     expect(ftp.errors.some((e) => e.includes("http(s)"))).toBe(true);
   });
 
@@ -82,6 +88,8 @@ describe("validateExtensionEnv", () => {
 
 describe("assertExtensionEnv", () => {
   it("throws one readable error listing every problem", () => {
-    expect(() => assertExtensionEnv({}, "production")).toThrow(/VITE_CLERK_PUBLISHABLE_KEY is missing[\s\S]*VITE_CLERK_SYNC_HOST is missing/);
+    expect(() => assertExtensionEnv({}, "production")).toThrow(
+      /VITE_CLERK_PUBLISHABLE_KEY is missing[\s\S]*VITE_CLERK_SYNC_HOST is missing/
+    );
   });
 });

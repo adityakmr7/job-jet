@@ -38,7 +38,10 @@ describe("tailorResume (anti-fabrication merge)", () => {
     });
     const result = await tailorResume(source, "We need TypeScript.");
     expect(result.summary).toBe("Tailored summary.");
-    expect(result.experience.map((e) => e.bullets)).toEqual([["Built A for scale", "Led B across teams"], ["Shipped C quickly"]]);
+    expect(result.experience.map((e) => e.bullets)).toEqual([
+      ["Built A for scale", "Led B across teams"],
+      ["Shipped C quickly"],
+    ]);
     // Untouchable facts copied from the source
     expect(result.fullName).toBe(source.fullName);
     expect(result.email).toBe(source.email);

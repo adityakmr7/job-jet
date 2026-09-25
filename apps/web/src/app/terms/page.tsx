@@ -33,8 +33,14 @@ export default function TermsPage() {
 
       <h2>Your content and responsibility for applications</h2>
       <ul>
-        <li>You keep ownership of the information and files you provide. You grant us the permission needed to store and process them to operate the Service, as described in our <Link href="/privacy">Privacy Policy</Link>.</li>
-        <li>Autofill and AI-generated content can be wrong or incomplete. You are solely responsible for reviewing every application and resume before you submit it, and for the accuracy of anything submitted under your name.</li>
+        <li>
+          You keep ownership of the information and files you provide. You grant us the permission needed to store and
+          process them to operate the Service, as described in our <Link href="/privacy">Privacy Policy</Link>.
+        </li>
+        <li>
+          Autofill and AI-generated content can be wrong or incomplete. You are solely responsible for reviewing every
+          application and resume before you submit it, and for the accuracy of anything submitted under your name.
+        </li>
         <li>Only provide information you have the right to share, and only apply using truthful information.</li>
       </ul>
 
@@ -42,8 +48,13 @@ export default function TermsPage() {
       <p>You agree not to:</p>
       <ul>
         <li>use the Service to submit applications in bulk, spam employers, or violate any website&apos;s terms;</li>
-        <li>attempt to access other users&apos; data, probe or disrupt the Service, or bypass rate limits or security measures;</li>
-        <li>reverse engineer the hosted Service beyond what applicable law or the open-source license of its code allows;</li>
+        <li>
+          attempt to access other users&apos; data, probe or disrupt the Service, or bypass rate limits or security
+          measures;
+        </li>
+        <li>
+          reverse engineer the hosted Service beyond what applicable law or the open-source license of its code allows;
+        </li>
         <li>use the Service for anything unlawful.</li>
       </ul>
       <p>We may suspend or terminate access for violations of these terms.</p>
@@ -77,8 +88,8 @@ export default function TermsPage() {
       <h2>Changes and termination</h2>
       <p>
         We may update these terms; the &quot;Last updated&quot; date above will change when we do, and continued use
-        means you accept the updated terms. You may stop using the Service at any time and request deletion of your
-        data as described in the Privacy Policy.
+        means you accept the updated terms. You may stop using the Service at any time and request deletion of your data
+        as described in the Privacy Policy.
       </p>
 
       <h2>Contact</h2>

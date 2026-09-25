@@ -5,7 +5,8 @@ import { ashbyFields, greenhouseFields, leverFields } from "./captured-fields";
 import { profile } from "./helpers";
 
 const field = (f: Partial<DetectedField> & { selector: string }): DetectedField => ({ type: "text", ...f });
-const asMap = (results: { selector: string; value: string }[]) => Object.fromEntries(results.map((r) => [r.selector, r.value]));
+const asMap = (results: { selector: string; value: string }[]) =>
+  Object.fromEntries(results.map((r) => [r.selector, r.value]));
 
 describe("fieldText / matches", () => {
   it("joins label, name, id and placeholder, lowercased", () => {
@@ -64,7 +65,12 @@ describe("mapProfileToFields (heuristic tier)", () => {
         [
           field({ selector: "li", label: "LinkedIn Profile" }),
           field({ selector: "web", label: "Other Website" }),
-          field({ selector: "auth", type: "select", name: "workAuthorization", label: "Are you legally authorized to work in the US?" }),
+          field({
+            selector: "auth",
+            type: "select",
+            name: "workAuthorization",
+            label: "Are you legally authorized to work in the US?",
+          }),
           field({ selector: "spon", type: "select", label: "Will you require visa sponsorship?" }),
           field({ selector: "school", label: "University" }),
           field({ selector: "deg", label: "Degree" }),
@@ -94,7 +100,10 @@ describe("mapProfileToFields (heuristic tier)", () => {
   it("requires 'current' before employer/company (regex precedence regression)", () => {
     const result = asMap(
       mapProfileToFields(
-        [field({ selector: "cur", label: "Current employer" }), field({ selector: "any", label: "Company size preference" })],
+        [
+          field({ selector: "cur", label: "Current employer" }),
+          field({ selector: "any", label: "Company size preference" }),
+        ],
         profile
       )
     );

@@ -51,7 +51,9 @@ await sql`CREATE SCHEMA IF NOT EXISTS drizzle`;
 await sql`CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)`;
 const existing = await sql`select count(*)::int as count from drizzle.__drizzle_migrations`;
 if (existing[0].count > 0) {
-  console.error("drizzle.__drizzle_migrations already has rows — this database is already baselined/migrated. Nothing to do.");
+  console.error(
+    "drizzle.__drizzle_migrations already has rows — this database is already baselined/migrated. Nothing to do."
+  );
   process.exit(1);
 }
 

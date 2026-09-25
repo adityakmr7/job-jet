@@ -29,7 +29,12 @@ export const leverFields: DetectedField[] = [
   { selector: "sel-6", type: "text", name: "urls[LinkedIn]", label: "LinkedIn URL" },
   { selector: "sel-7", type: "text", name: "urls[GitHub]", label: "GitHub URL" },
   { selector: "sel-8", type: "text", name: "urls[Portfolio]", label: "Portfolio URL" },
-  { selector: "sel-9", type: "text", name: "cards[x][field2]", label: "What is your anticipated start date? (Month/Year)" },
+  {
+    selector: "sel-9",
+    type: "text",
+    name: "cards[x][field2]",
+    label: "What is your anticipated start date? (Month/Year)",
+  },
 ];
 
 // jobs.ashbyhq.com/fieldguide/.../application

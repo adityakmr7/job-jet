@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "@job-jet/shared";
-import { ALLOWED_PROFILE_FIELD_PATHS, PROFILE_FIELD_PATH_DESCRIPTIONS, resolveProfileFieldPath } from "@/lib/field-paths";
+import {
+  ALLOWED_PROFILE_FIELD_PATHS,
+  PROFILE_FIELD_PATH_DESCRIPTIONS,
+  resolveProfileFieldPath,
+} from "@/lib/field-paths";
 
 const profile: Profile = {
   id: "p1",
@@ -52,8 +56,23 @@ describe("resolveProfileFieldPath", () => {
   });
 
   it("returns undefined when the profile lacks the data", () => {
-    const sparse: Profile = { ...profile, phone: undefined, links: [], experience: [], education: [], workAuthorization: undefined };
-    for (const path of ["phone", "linkedin", "portfolio", "currentCompany", "yearsOfExperience", "school", "authorizedToWork"]) {
+    const sparse: Profile = {
+      ...profile,
+      phone: undefined,
+      links: [],
+      experience: [],
+      education: [],
+      workAuthorization: undefined,
+    };
+    for (const path of [
+      "phone",
+      "linkedin",
+      "portfolio",
+      "currentCompany",
+      "yearsOfExperience",
+      "school",
+      "authorizedToWork",
+    ]) {
       expect(resolveProfileFieldPath(sparse, path)).toBeUndefined();
     }
   });

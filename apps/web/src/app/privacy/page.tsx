@@ -16,8 +16,8 @@ export default function PrivacyPage() {
     <LegalPage title="Privacy Policy">
       <p>
         {SITE_NAME} (&quot;we&quot;, &quot;us&quot;) is a web app and Chrome extension that helps you fill in job
-        applications and generate resumes tailored to a job description. This policy explains what data we collect,
-        why, where it is stored, and the choices you have.
+        applications and generate resumes tailored to a job description. This policy explains what data we collect, why,
+        where it is stored, and the choices you have.
       </p>
 
       <h2>Data we collect</h2>
@@ -92,34 +92,51 @@ export default function PrivacyPage() {
 
       <h2>How we use your data</h2>
       <ul>
-        <li>To provide the service: store your profile, fill in forms you choose to fill, generate tailored resumes, and track applications.</li>
+        <li>
+          To provide the service: store your profile, fill in forms you choose to fill, generate tailored resumes, and
+          track applications.
+        </li>
         <li>To keep the service secure and reliable, including rate limiting and abuse prevention.</li>
       </ul>
       <p>We do not sell your personal data, and we do not use it for advertising.</p>
 
       <h2>AI processing (Google Gemini)</h2>
-      <p>
-        Some features send data to Google&apos;s Gemini API for processing:
-      </p>
+      <p>Some features send data to Google&apos;s Gemini API for processing:</p>
       <ul>
-        <li><strong>Resume parsing:</strong> the text extracted from a resume you upload.</li>
-        <li><strong>Resume tailoring:</strong> the job description plus your profile&apos;s summary, work experience (companies, titles, bullet points), and skill names.</li>
-        <li><strong>Autofill matching:</strong> form field descriptions only (labels, names, placeholders, types, options) — not your profile values.</li>
+        <li>
+          <strong>Resume parsing:</strong> the text extracted from a resume you upload.
+        </li>
+        <li>
+          <strong>Resume tailoring:</strong> the job description plus your profile&apos;s summary, work experience
+          (companies, titles, bullet points), and skill names.
+        </li>
+        <li>
+          <strong>Autofill matching:</strong> form field descriptions only (labels, names, placeholders, types, options)
+          — not your profile values.
+        </li>
       </ul>
       <p>
         Google processes this data under the{" "}
         <a href="https://ai.google.dev/gemini-api/terms">Gemini API Additional Terms of Service</a> and the{" "}
         <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. Depending on the API tier in use,
-        Google&apos;s terms may permit it to use submitted content to improve its products. AI output can be
-        inaccurate — always review autofilled answers and generated resumes before submitting them.
+        Google&apos;s terms may permit it to use submitted content to improve its products. AI output can be inaccurate
+        — always review autofilled answers and generated resumes before submitting them.
       </p>
 
       <h2>Where your data is stored (service providers)</h2>
       <ul>
-        <li><strong>Clerk</strong> — authentication and account management.</li>
-        <li><strong>Neon</strong> — PostgreSQL database for your profile, resume content, and application tracker.</li>
-        <li><strong>Vercel</strong> — hosting of the web app and API, and Vercel Blob private storage for resume files.</li>
-        <li><strong>Google</strong> — Gemini API for the AI features described above.</li>
+        <li>
+          <strong>Clerk</strong> — authentication and account management.
+        </li>
+        <li>
+          <strong>Neon</strong> — PostgreSQL database for your profile, resume content, and application tracker.
+        </li>
+        <li>
+          <strong>Vercel</strong> — hosting of the web app and API, and Vercel Blob private storage for resume files.
+        </li>
+        <li>
+          <strong>Google</strong> — Gemini API for the AI features described above.
+        </li>
       </ul>
       <p>
         These providers process data on our behalf and may store it in the United States or other countries. Resume
@@ -128,16 +145,16 @@ export default function PrivacyPage() {
 
       <h2>Retention and deletion</h2>
       <p>
-        We keep your data while your account is active. You can edit your profile and delete tracked applications in
-        the dashboard at any time. To delete your account and all associated data (profile, resumes, resume files, and
+        We keep your data while your account is active. You can edit your profile and delete tracked applications in the
+        dashboard at any time. To delete your account and all associated data (profile, resumes, resume files, and
         applications), email us at {CONTACT_EMAIL} and we will delete it within 30 days. Rate-limit counters are deleted
         automatically; the shared autofill cache contains no personal data.
       </p>
 
       <h2>Your rights</h2>
       <p>
-        Depending on where you live, you may have the right to access, correct, export, or delete your personal data,
-        or to object to certain processing. Contact us at {CONTACT_EMAIL} to make a request.
+        Depending on where you live, you may have the right to access, correct, export, or delete your personal data, or
+        to object to certain processing. Contact us at {CONTACT_EMAIL} to make a request.
       </p>
 
       <h2>Children</h2>

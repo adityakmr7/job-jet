@@ -45,10 +45,7 @@ function isTruthyFlag(value: string | undefined): boolean {
   return value !== undefined && ["1", "true", "yes"].includes(value.trim().toLowerCase());
 }
 
-export function validateExtensionEnv(
-  env: Record<string, string | undefined>,
-  mode: string
-): EnvValidationResult {
+export function validateExtensionEnv(env: Record<string, string | undefined>, mode: string): EnvValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -60,7 +57,9 @@ export function validateExtensionEnv(
   const syncHost = env.VITE_CLERK_SYNC_HOST?.trim() ?? "";
 
   if (key && !/^pk_(test|live)_[A-Za-z0-9+/=_-]+$/.test(key)) {
-    errors.push("VITE_CLERK_PUBLISHABLE_KEY doesn't look like a Clerk publishable key (expected pk_test_… or pk_live_…).");
+    errors.push(
+      "VITE_CLERK_PUBLISHABLE_KEY doesn't look like a Clerk publishable key (expected pk_test_… or pk_live_…)."
+    );
   } else if (key && !decodesToFrontendApi(key)) {
     errors.push("VITE_CLERK_PUBLISHABLE_KEY is malformed (its payload doesn't decode to a Clerk Frontend API host).");
   }
