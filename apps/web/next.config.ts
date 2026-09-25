@@ -1,4 +1,10 @@
 import type { NextConfig } from "next";
+import { buildSecurityHeaders } from "./src/lib/security-headers";
+
+const securityHeaders = buildSecurityHeaders({
+  clerkPublishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  isDev: process.env.NODE_ENV !== "production",
+});
 
 const nextConfig: NextConfig = {
   // pdf-parse (via pdfjs-dist) dynamically resolves its own worker script
@@ -9,6 +15,11 @@ const nextConfig: NextConfig = {
   // resolves, fixes it. Same category of issue Next's own docs list
   // sharp/canvas/@react-pdf/renderer under.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  // Don't advertise the framework in every response.
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
 };
 
 export default nextConfig;
