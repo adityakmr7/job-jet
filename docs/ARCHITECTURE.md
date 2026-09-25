@@ -217,8 +217,9 @@ cross-origin problem: the extension (`chrome-extension://...`) and the web
 app (`https://...`) are different origins with no shared cookie jar. The
 side panel gets a Clerk session token via `useAuth().getToken()` and sends
 it as `Authorization: Bearer <token>` (`apps/extension/src/lib/api.ts`);
-the backend answers with matching CORS headers scoped specifically to
-`chrome-extension://` origins (`apps/web/src/lib/cors.ts`), and `proxy.ts`
+the backend answers with matching CORS headers scoped to the extension IDs
+listed in `ALLOWED_EXTENSION_IDS` (any `chrome-extension://` origin in
+development if unset; none in production — `apps/web/src/lib/cors.ts`), and `proxy.ts`
 lets the unauthenticated `OPTIONS` preflight through so the CORS handshake
 itself isn't blocked by Clerk's auth check before the browser ever sends
 the real request.
@@ -351,8 +352,9 @@ override is in the shipped code). Also fixed along the way, found by
 actually looking rather than assumed: Chrome's native autofill styling
 was overriding our input colors with its own grey/yellow highlight
 (`:-webkit-autofill` needs its own override, globals.css); Job Jet's own
-web app (`localhost:3001` in dev) is now explicitly excluded from the
-extension's detection — the profile/resume dashboard has enough genuine
+web app is now explicitly excluded from the extension's detection (its
+host is derived from the build's `VITE_CLERK_SYNC_HOST` — `localhost:3001`
+in dev, the deployed domain in production; see `own-app.ts`) — the profile/resume dashboard has enough genuine
 form-field evidence (real inputs, a real file upload) to pass the
 heuristic even after the earlier text-keyword fix, so the floating button
 was showing up on our own product.
