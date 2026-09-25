@@ -12,5 +12,8 @@
     "build:web": "npm run build --workspace=apps/web",
     "build:extension": "npm run build --workspace=apps/extension",
     "test:fixtures": "npm run test:fixtures --workspace=apps/extension"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

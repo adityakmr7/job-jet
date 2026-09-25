@@ -275,10 +275,11 @@ one-file change. Currently Gemini via a free API key, using
 
 `apps/web/src/lib/resume-parse.ts` calls this via the AI SDK's
 `generateObject`, against a zod schema kept intentionally separate from
-`packages/shared`'s (documented inline) — apps/web resolves zod v4 while
-the shared package's schemas are built against v3, and mixing the two
-majors broke TypeScript's structural inference against `generateObject`'s
-types.
+`packages/shared`'s (documented inline). Originally apps/web resolved zod
+v4 while the shared package was on v3, and mixing the two majors broke
+TypeScript's structural inference against `generateObject`'s types. All
+workspaces are now on zod 4; the local AI schemas stay separate because
+they intentionally differ (no `id` fields, model-specific shape).
 
 Getting a PDF into text for that call hit its own bundling bug:
 `pdf-parse` (via `pdfjs-dist`) dynamically resolves its own worker script

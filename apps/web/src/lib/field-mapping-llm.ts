@@ -3,11 +3,9 @@ import { z } from "zod";
 import { getModel } from "./ai";
 import { ALLOWED_PROFILE_FIELD_PATHS, PROFILE_FIELD_PATH_DESCRIPTIONS } from "./field-paths";
 
-/** Local zod (v4, apps/web's own dependency) schema for the LLM call —
- *  deliberately not importing @job-jet/shared's DetectedFieldSchema/
- *  FieldMappingSchema into this generateObject call; those are zod v3 and
- *  mixing versions inside an AI SDK schema breaks its structural inference
- *  (see resume-parse.ts / resume-tailor.ts, which hit this first). */
+/** Local zod schema describing exactly what the LLM prompt sees (an
+ *  index instead of a selector, no id) — intentionally narrower than
+ *  @job-jet/shared's DetectedFieldSchema. */
 const FieldForPromptSchema = z.object({
   index: z.number(),
   label: z.string().optional(),
