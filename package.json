@@ -1,5 +1,6 @@
 {
   "name": "job-jet",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "workspaces": [
@@ -16,7 +17,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "release:extension": "npm run build --workspace=apps/extension && node scripts/zip-extension.mjs"
   },
   "engines": {
     "node": ">=22"
