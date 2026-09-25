@@ -16,18 +16,23 @@ export default defineManifest((configEnv: ConfigEnv) => {
 
   return {
     manifest_version: 3,
-    name: "Job Jet — Auto Apply Assistant",
+    // Store limits: name ≤ 75, description ≤ 132 characters.
+    name: "Job Jet — Autofill Job Applications & Tailor Your Resume",
+    short_name: "Job Jet",
     description:
-      "Detects job application forms on any site and helps you autofill them or generate a tailored resume from the job description.",
+      "Autofill job applications on any careers site, tailor your resume to each role, and track every application you send.",
     version: pkg.version,
     icons: {
       16: "icons/icon16.png",
+      32: "icons/icon32.png",
       48: "icons/icon48.png",
       128: "icons/icon128.png",
     },
     action: {
+      default_title: "Open Job Jet",
       default_icon: {
         16: "icons/icon16.png",
+        32: "icons/icon32.png",
         48: "icons/icon48.png",
         128: "icons/icon128.png",
       },
