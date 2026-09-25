@@ -79,33 +79,38 @@ export function App() {
    *  the active tab navigates to a different site. */
   async function refreshPageData() {
     if (!isSignedInRef.current) return;
-    try {
-      const res = await sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
-        type: "REQUEST_FORM_FIELDS",
+    const fetchFields = sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
+      type: "REQUEST_FORM_FIELDS",
+    })
+      .then((res) => {
+        setFields(res.payload.fields);
+      })
+      .catch((err) => {
+        // Was previously silent — surfaced now because a swallowed error
+        // here looks IDENTICAL in the UI to a genuine "no fields on this
+        // page" (both just show 0), which cost real debugging time working
+        // out that a failure, not an empty result, was behind a "0 fields"
+        // report. console.error is the best available signal today since
+        // the side panel's own devtools console isn't reachable from
+        // outside it — open the panel, right-click it, Inspect, to see this.
+        console.error("[job-jet] REQUEST_FORM_FIELDS failed:", err);
+        setFields([]);
       });
-      setFields(res.payload.fields);
-    } catch (err) {
-      // Was previously silent — surfaced now because a swallowed error
-      // here looks IDENTICAL in the UI to a genuine "no fields on this
-      // page" (both just show 0), which cost real debugging time working
-      // out that a failure, not an empty result, was behind a "0 fields"
-      // report. console.error is the best available signal today since
-      // the side panel's own devtools console isn't reachable from
-      // outside it — open the panel, right-click it, Inspect, to see this.
-      console.error("[job-jet] REQUEST_FORM_FIELDS failed:", err);
-      setFields([]);
-    }
-    try {
-      const res = await sendToContentScript<{ type: string; payload: { text: string; title?: string } }>({
-        type: "EXTRACT_JOB_DESCRIPTION",
+
+    const fetchJd = sendToContentScript<{ type: string; payload: { text: string; title?: string } }>({
+      type: "EXTRACT_JOB_DESCRIPTION",
+    })
+      .then((res) => {
+        setJobDescription(res.payload.text);
+        setJobTitle(res.payload.title);
+      })
+      .catch((err) => {
+        console.error("[job-jet] EXTRACT_JOB_DESCRIPTION failed:", err);
+        setJobDescription("");
+        setJobTitle(undefined);
       });
-      setJobDescription(res.payload.text);
-      setJobTitle(res.payload.title);
-    } catch (err) {
-      console.error("[job-jet] EXTRACT_JOB_DESCRIPTION failed:", err);
-      setJobDescription("");
-      setJobTitle(undefined);
-    }
+
+    await Promise.all([fetchFields, fetchJd]);
   }
 
   useEffect(() => {
