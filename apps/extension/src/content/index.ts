@@ -14,25 +14,18 @@ import type { ExtensionMessage } from "../lib/messages";
  * stacks another `chrome.runtime.onMessage` listener onto that page, and
  * multiple listeners racing to answer the same message is exactly what
  * caused fields to "flicker" between 0 and a real count during testing —
- * whichever stale/fresh listener happened to respond first won. Found by
- * noticing the same "[job-jet] extension id" diagnostic log appearing
- * many times in one page's console with no matching page reload.
+ * whichever stale/fresh listener happened to respond first won. (The
+ * extension ID, needed for Clerk's allowed_origins and the backend's
+ * ALLOWED_EXTENSION_IDS, is shown on chrome://extensions.)
  */
 const GUARD_KEY = "__jobJetContentScriptLoaded";
 const globalWindow = window as unknown as Record<string, boolean>;
 
-if (globalWindow[GUARD_KEY]) {
-  console.log("[job-jet] content script already active in this page — skipping re-init");
-} else {
+if (!globalWindow[GUARD_KEY]) {
   globalWindow[GUARD_KEY] = true;
 
   let lastUrl = location.href;
   let debounceTimer: number | undefined;
-
-  // Diagnostic: lets us confirm the loaded extension's real ID against the
-  // one computed from its unpacked directory path (needed to register
-  // Clerk's allowed_origins for cross-origin session sync).
-  console.log("[job-jet] extension id:", chrome.runtime.id);
 
   const runDetection = () => {
     const result = detectJobApplication();

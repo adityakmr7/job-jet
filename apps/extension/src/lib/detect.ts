@@ -9,6 +9,7 @@
  */
 
 import { queryAllDeep } from "./dom-deep";
+import { isOwnAppHost } from "./own-app";
 
 // Known ATS hostnames — fast path, skips scoring entirely.
 const KNOWN_ATS_HOSTS = [
@@ -36,15 +37,10 @@ const KNOWN_ATS_HOSTS = [
   "personio.com",
 ];
 
-// Job Jet's own web app is never a job application, even though its
-// dashboard genuinely has real form fields and a file upload (the profile
-// editor + resume uploader) — enough "form evidence" to otherwise pass the
-// heuristic below. Found by dogfooding: the floating button was showing
-// up on our own dashboard. Matched by host (hostname:port), not just
-// hostname — localhost also serves the test fixtures (port 4000), which
-// must NOT be excluded, they're meant to be detected.
-// TODO: add the production domain (hostname only, no port) once deployed.
-const OWN_APP_HOSTS = ["localhost:3001", "127.0.0.1:3001"];
+// Job Jet's own web app is never a job application — see own-app.ts. The
+// excluded hosts are derived from the configured backend URL at build time,
+// so production builds exclude the production domain automatically.
+const BACKEND_URL: string | undefined = import.meta.env.VITE_CLERK_SYNC_HOST;
 
 const URL_KEYWORDS = ["job", "career", "apply", "position", "opening", "vacanc"];
 
@@ -89,12 +85,11 @@ export interface DetectionResult {
   hasFileUpload: boolean;
 }
 
-function hostMatches(hostname: string): boolean {
+export function hostMatches(hostname: string): boolean {
   return KNOWN_ATS_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
 }
 
-function scoreFieldKeywords(text: string): number {
-  const re = new RegExp(FIELD_KEYWORDS.join("|"), "i");
+export function scoreFieldKeywords(text: string): number {
   let hits = 0;
   for (const kw of FIELD_KEYWORDS) {
     if (new RegExp(kw, "i").test(text)) hits++;
@@ -102,11 +97,11 @@ function scoreFieldKeywords(text: string): number {
   return hits;
 }
 
-function collectFormSignal(): { fieldHits: number; textInputCount: number; hasFileUpload: boolean } {
+function collectFormSignal(doc: Document): { fieldHits: number; textInputCount: number; hasFileUpload: boolean } {
   // queryAllDeep, not a plain querySelectorAll — a real ATS found during
   // testing (SmartRecruiters) renders its actual fields entirely inside
   // open shadow roots, invisible to a top-level query. See dom-deep.ts.
-  const inputs = queryAllDeep(document, "input, textarea, select");
+  const inputs = queryAllDeep(doc, "input, textarea, select");
   const textInputCount = inputs.filter(
     (el) => el.tagName !== "INPUT" || !["hidden", "submit", "button", "checkbox", "radio"].includes((el as HTMLInputElement).type)
   ).length;
@@ -132,42 +127,53 @@ function collectFormSignal(): { fieldHits: number; textInputCount: number; hasFi
   return { fieldHits: scoreFieldKeywords(labelText), textInputCount, hasFileUpload };
 }
 
-export function detectJobApplication(): DetectionResult {
-  const hostname = location.hostname;
+/**
+ * @param doc  Document to inspect (defaults to the live page).
+ * @param href URL of that document (defaults to the live page's URL).
+ * @param backendUrl Job Jet's own web app URL, whose host is never treated
+ *   as a job application (defaults to the build-time VITE_CLERK_SYNC_HOST).
+ */
+export function detectJobApplication(
+  doc: Document = document,
+  href: string = location.href,
+  backendUrl: string | undefined = BACKEND_URL
+): DetectionResult {
+  const pageUrl = new URL(href);
+  const hostname = pageUrl.hostname;
   const signals: string[] = [];
 
-  if (OWN_APP_HOSTS.includes(location.host)) {
+  if (isOwnAppHost(pageUrl.host, backendUrl)) {
     return { isJobApplication: false, confidence: 0, signals: ["own-app-host"], hasFileUpload: false };
   }
 
   if (hostMatches(hostname)) {
     signals.push(`known-ats:${hostname}`);
-    const { hasFileUpload } = collectFormSignal();
+    const { hasFileUpload } = collectFormSignal(doc);
     return { isJobApplication: true, confidence: 0.95, signals, hasFileUpload };
   }
 
   let score = 0;
 
-  const url = location.href.toLowerCase();
+  const url = href.toLowerCase();
   if (URL_KEYWORDS.some((kw) => url.includes(kw))) {
     score += 1;
     signals.push("url-keyword");
   }
 
-  const title = document.title.toLowerCase();
+  const title = doc.title.toLowerCase();
   if (URL_KEYWORDS.some((kw) => title.includes(kw))) {
     score += 1;
     signals.push("title-keyword");
   }
 
-  const bodyText = document.body?.innerText?.toLowerCase().slice(0, 20000) ?? "";
+  const bodyText = doc.body?.innerText?.toLowerCase().slice(0, 20000) ?? "";
   const textHits = PAGE_TEXT_KEYWORDS.filter((kw) => bodyText.includes(kw)).length;
   if (textHits > 0) {
     score += Math.min(textHits, 3); // cap contribution
     signals.push(`page-text-keywords:${textHits}`);
   }
 
-  const { fieldHits, textInputCount, hasFileUpload } = collectFormSignal();
+  const { fieldHits, textInputCount, hasFileUpload } = collectFormSignal(doc);
   if (fieldHits > 0) {
     score += fieldHits * 1.5;
     signals.push(`field-keywords:${fieldHits}`);
