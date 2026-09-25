@@ -15,8 +15,8 @@ import { isExtensionMessage, isTrustedSender, type ExtensionMessage } from "../l
  * multiple listeners racing to answer the same message is exactly what
  * caused fields to "flicker" between 0 and a real count during testing —
  * whichever stale/fresh listener happened to respond first won. (The
- * extension ID, needed for Clerk's allowed_origins and the backend's
- * ALLOWED_EXTENSION_IDS, is shown on chrome://extensions.)
+ * extension ID, needed for the backend's ALLOWED_EXTENSION_IDS, is shown
+ * on chrome://extensions.)
  */
 const GUARD_KEY = "__jobJetContentScriptLoaded";
 const globalWindow = window as unknown as Record<string, boolean>;

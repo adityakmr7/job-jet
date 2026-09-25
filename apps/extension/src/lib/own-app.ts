@@ -5,8 +5,8 @@
  * pass the job-page heuristic — so the content script must never offer
  * autofill there.
  *
- * Derived from the configured backend URL (VITE_CLERK_SYNC_HOST — the same
- * origin the extension talks to for its API and Clerk session sync), so a
+ * Derived from the configured backend URL (VITE_API_BASE_URL — the same
+ * origin the extension talks to for its API and sign-in), so a
  * production build automatically excludes the production domain and a dev
  * build excludes the local dev server, with no hardcoded hosts to forget.
  *

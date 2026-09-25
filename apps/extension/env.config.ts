@@ -3,24 +3,23 @@
  *
  * Vite inlines `import.meta.env.VITE_*` into the bundle at build time, so a
  * missing or wrong value doesn't fail loudly — it silently ships an
- * extension that can't sign in or talks to the wrong backend. This runs
- * from vite.config.ts and aborts the build instead.
+ * extension that talks to the wrong backend. This runs from vite.config.ts
+ * and aborts the build instead.
  *
  * Rules:
- *  - VITE_CLERK_PUBLISHABLE_KEY and VITE_CLERK_SYNC_HOST are required and
- *    must be non-empty in every mode.
- *  - The publishable key must look like a Clerk key (pk_test_/pk_live_).
- *  - The sync host must be an absolute http(s) URL (it's also the backend
- *    API base URL).
- *  - In production mode (`vite build`, the default mode for builds), the
- *    backend must not be localhost/loopback and must use https, and the
- *    Clerk key must be a live key (pk_live_). Set
- *    JOBJET_ALLOW_DEV_CONFIG=true to deliberately build a production-mode
- *    bundle against dev values (e.g. a local smoke test). For day-to-day
- *    local unpacked builds use `npm run build:dev` (development mode).
+ *  - VITE_API_BASE_URL (the Job Jet web app origin: API, sign-in and the
+ *    /extension-connect page) is required and must be an absolute http(s)
+ *    URL with no path.
+ *  - In production mode (`vite build`, the default mode for builds), it must
+ *    not be localhost/loopback and must use https — this also guarantees
+ *    the manifest's externally_connectable never lists localhost in a
+ *    release. Set JOBJET_ALLOW_DEV_CONFIG=true to deliberately build a
+ *    production-mode bundle against dev values (e.g. a local smoke test).
+ *    For day-to-day local unpacked builds use `npm run build:dev`.
+ *  - Leftover Clerk variables (VITE_CLERK_*) only produce a warning.
  */
 
-export const REQUIRED_ENV_VARS = ["VITE_CLERK_PUBLISHABLE_KEY", "VITE_CLERK_SYNC_HOST"] as const;
+export const REQUIRED_ENV_VARS = ["VITE_API_BASE_URL"] as const;
 
 export const ALLOW_DEV_CONFIG_FLAG = "JOBJET_ALLOW_DEV_CONFIG";
 
@@ -29,16 +28,6 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"
 export interface EnvValidationResult {
   errors: string[];
   warnings: string[];
-}
-
-/** Clerk publishable keys are `pk_{test|live}_` + base64(`${frontendApi}$`). */
-function decodesToFrontendApi(key: string): boolean {
-  try {
-    const decoded = atob(key.replace(/^pk_(test|live)_/, ""));
-    return decoded.endsWith("$") && decoded.length > 1;
-  } catch {
-    return false;
-  }
 }
 
 function isTruthyFlag(value: string | undefined): boolean {
@@ -53,39 +42,32 @@ export function validateExtensionEnv(env: Record<string, string | undefined>, mo
     if (!env[name]?.trim()) errors.push(`${name} is missing or empty.`);
   }
 
-  const key = env.VITE_CLERK_PUBLISHABLE_KEY?.trim() ?? "";
-  const syncHost = env.VITE_CLERK_SYNC_HOST?.trim() ?? "";
-
-  if (key && !/^pk_(test|live)_[A-Za-z0-9+/=_-]+$/.test(key)) {
-    errors.push(
-      "VITE_CLERK_PUBLISHABLE_KEY doesn't look like a Clerk publishable key (expected pk_test_… or pk_live_…)."
-    );
-  } else if (key && !decodesToFrontendApi(key)) {
-    errors.push("VITE_CLERK_PUBLISHABLE_KEY is malformed (its payload doesn't decode to a Clerk Frontend API host).");
+  for (const legacy of ["VITE_CLERK_PUBLISHABLE_KEY", "VITE_CLERK_SYNC_HOST"]) {
+    if (env[legacy]?.trim()) warnings.push(`${legacy} is no longer used (Clerk was replaced by Better Auth) — remove it.`);
   }
 
+  const baseUrl = env.VITE_API_BASE_URL?.trim() ?? "";
   let url: URL | undefined;
-  if (syncHost) {
+  if (baseUrl) {
     try {
-      url = new URL(syncHost);
+      url = new URL(baseUrl);
       if (url.protocol !== "http:" && url.protocol !== "https:") {
-        errors.push(`VITE_CLERK_SYNC_HOST must be an http(s) URL, got "${syncHost}".`);
+        errors.push(`VITE_API_BASE_URL must be an http(s) URL, got "${baseUrl}".`);
         url = undefined;
+      } else if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) {
+        errors.push(`VITE_API_BASE_URL must be an origin with no path (e.g. https://jobjet.example.com), got "${baseUrl}".`);
       }
     } catch {
-      errors.push(`VITE_CLERK_SYNC_HOST must be an absolute URL (e.g. https://jobjet.example.com), got "${syncHost}".`);
+      errors.push(`VITE_API_BASE_URL must be an absolute URL (e.g. https://jobjet.example.com), got "${baseUrl}".`);
     }
   }
 
   if (mode === "production") {
     const devProblems: string[] = [];
     if (url && LOOPBACK_HOSTNAMES.has(url.hostname)) {
-      devProblems.push(`VITE_CLERK_SYNC_HOST points at ${url.host} (a local dev server).`);
+      devProblems.push(`VITE_API_BASE_URL points at ${url.host} (a local dev server).`);
     } else if (url && url.protocol !== "https:") {
-      devProblems.push("VITE_CLERK_SYNC_HOST must use https:// in production.");
-    }
-    if (key.startsWith("pk_test_")) {
-      devProblems.push("VITE_CLERK_PUBLISHABLE_KEY is a development key (pk_test_…); production needs pk_live_….");
+      devProblems.push("VITE_API_BASE_URL must use https:// in production.");
     }
 
     if (devProblems.length) {
@@ -115,4 +97,16 @@ export function assertExtensionEnv(env: Record<string, string | undefined>, mode
     );
   }
   return warnings;
+}
+
+/**
+ * Chrome match pattern for `externally_connectable`: only the web app's
+ * origin may message the extension (used by /extension-connect). Match
+ * patterns can't carry a port, so a localhost dev origin becomes
+ * `http://localhost/*`; the background script still checks the exact
+ * origin (including port) of every message.
+ */
+export function externallyConnectableMatch(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  return `${url.protocol}//${url.hostname}/*`;
 }

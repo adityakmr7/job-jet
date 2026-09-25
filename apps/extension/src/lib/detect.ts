@@ -40,7 +40,7 @@ const KNOWN_ATS_HOSTS = [
 // Job Jet's own web app is never a job application — see own-app.ts. The
 // excluded hosts are derived from the configured backend URL at build time,
 // so production builds exclude the production domain automatically.
-const BACKEND_URL: string | undefined = import.meta.env.VITE_CLERK_SYNC_HOST;
+const BACKEND_URL: string | undefined = import.meta.env.VITE_API_BASE_URL;
 
 const URL_KEYWORDS = ["job", "career", "apply", "position", "opening", "vacanc"];
 
@@ -131,7 +131,7 @@ function collectFormSignal(doc: Document): { fieldHits: number; textInputCount: 
  * @param doc  Document to inspect (defaults to the live page).
  * @param href URL of that document (defaults to the live page's URL).
  * @param backendUrl Job Jet's own web app URL, whose host is never treated
- *   as a job application (defaults to the build-time VITE_CLERK_SYNC_HOST).
+ *   as a job application (defaults to the build-time VITE_API_BASE_URL).
  */
 export function detectJobApplication(
   doc: Document = document,
