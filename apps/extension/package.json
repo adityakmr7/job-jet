@@ -16,7 +16,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@clerk/chrome-extension": "^3.1.82",
     "@job-jet/shared": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
