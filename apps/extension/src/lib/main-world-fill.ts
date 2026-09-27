@@ -123,6 +123,12 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
     return null;
   }
 
+  // Keep in sync with saved-answers.ts (DECLINE_SENTINEL, DECLINE_OPTION);
+  // this function is serialized, so it can't import them.
+  const DECLINE = "__jobjet_decline__";
+  const DECLINE_OPTION =
+    /decline|prefer not|rather not|do not wish|don.?t wish|not wish to|choose not|not to (say|answer|disclose|self)|wish not/i;
+
   const norm = (s: string | null | undefined) =>
     (s ?? "")
       .toLowerCase()
@@ -154,6 +160,11 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
     const target = norm(value);
     if (!target) return -1;
     const normed = options.map(norm);
+    if (value === DECLINE) {
+      // The user chose "decline to answer" for a voluntary question: the
+      // form's own decline / prefer-not-to-say option, first one wins.
+      return normed.findIndex((o) => DECLINE_OPTION.test(o));
+    }
     const exact = normed.indexOf(target);
     if (exact >= 0) return exact;
 
@@ -299,6 +310,10 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
       }
       await wait(50);
     }
+    if (value === DECLINE) {
+      closeMenu(el);
+      return false;
+    }
     // 2. Type-to-search: type the most specific leading part (the city of
     //    "San Francisco, CA") and wait for suggestions.
     const search = value.includes(",") ? value.split(",")[0].trim() : value;
@@ -335,6 +350,10 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
   }
 
   async function setChoice(el: HTMLInputElement, value: string): Promise<boolean> {
+    if (value === DECLINE) {
+      if (!DECLINE_OPTION.test(ownOptionText(el))) return false;
+      value = ownOptionText(el);
+    }
     const want = polarity(value);
     const buttons = yesNoButtons(el);
     if (buttons.length) {
@@ -358,7 +377,11 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
       shouldCheck = !!own && (own === norm(value) || norm(el.value) === norm(value));
     } else {
       // A lone statement checkbox ("I am authorized to work in the US").
-      shouldCheck = want === "yes" || ["1", "on", "true"].includes(norm(value)) || norm(el.value) === norm(value);
+      shouldCheck =
+        want === "yes" ||
+        ["1", "on", "true"].includes(norm(value)) ||
+        norm(el.value) === norm(value) ||
+        (!!own && own === norm(value));
     }
     if (!shouldCheck) return false;
     if (!el.checked) {
@@ -406,6 +429,8 @@ export async function mainWorldFill(payload: FillPayload): Promise<FillResult> {
     if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
       return setChoice(el, value);
     }
+    // "Decline" only ever picks an option; it's never typed.
+    if (value === DECLINE && !(el instanceof HTMLSelectElement)) return false;
     if (el instanceof HTMLInputElement && isAutocompleteText(el)) {
       const search = value.includes(",") ? value.split(",")[0].trim() : value;
       await typeText(el, search);

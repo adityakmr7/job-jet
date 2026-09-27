@@ -307,6 +307,12 @@ DATABASE_URL=... node scripts/db-baseline.mjs   # or: npm run db:baseline (uses 
 DATABASE_URL=... npm run db:migrate:env         # applies 0001_add_rate_limits and later
 ```
 
+**Pending for production:** `0003_add_application_answers` (saved answers
+bank) adds the nullable `profiles.application_answers` jsonb column. Run
+`DATABASE_URL=<production> npm run db:migrate:env --workspace=apps/web`
+before deploying a web build that includes it. Without the column, profile
+reads and writes fail.
+
 `db-baseline.mjs` refuses to run on an empty database or one that already
 has migration history.
 
@@ -397,7 +403,14 @@ writeup, including what got found by inspecting two real live job postings:
    cross-origin (the extension's session token as a Bearer header —
    see `src/lib/api.ts` and the backend's `src/lib/cors.ts`). Deliberately
    never fills voluntary EEO self-identification fields (gender, ethnicity,
-   veteran/disability status, pronouns) — those stay opt-in and manual.
+   veteran/disability status, pronouns) unless the user has explicitly set
+   an answer (or "decline") for that category under Voluntary questions.
+   **Saved answers** (`packages/shared/src/answers.ts`, `answer-helpers.ts`;
+   extension `src/lib/saved-answers.ts`) cover recurring questions: referral
+   source, notice period and start date, salary, relocation, work mode,
+   years of experience, per-country work authorization (`workAuthFor`
+   detects the country named in the question) and the user's own
+   question/answer pairs.
 2. **Known-site adapter (done for Greenhouse, Lever, Ashby)** —
    `apps/extension/src/lib/adapters/` targets each platform's stable field
    id/name directly rather than guessing from label text. Verified against

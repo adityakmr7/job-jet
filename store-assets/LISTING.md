@@ -55,7 +55,8 @@ FILL APPLICATIONS IN SECONDS
 • Works on hosted applicant-tracking pages (such as Greenhouse, Lever, Ashby and Workable), on companies' own careers sites, and on careers pages that embed one of those forms.
 • Multi-step forms keep filling as you move to the next step.
 • Attaches your resume to the form's resume field, unless you've already picked a file.
-• Job Jet never submits anything. Voluntary demographic questions (such as gender, ethnicity, disability or veteran status) and open-ended answers are always left to you, and questions it isn't sure about are left empty rather than guessed.
+• Save answers to the questions every application asks: notice period, start date, salary expectation, how you heard about the company, relocation, work mode, and work authorization for each country. Add your own questions too.
+• Job Jet never submits anything. Voluntary demographic questions (such as gender, ethnicity, disability or veteran status) are left to you unless you choose to save an answer for them. Open-ended answers are always left to you, and questions it isn't sure about are left empty rather than guessed.
 
 A RESUME FOR EVERY ROLE
 • Generate a version of your resume tailored to the job post you're on, as a clean PDF saved to your Downloads folder, ready to attach.
@@ -121,8 +122,8 @@ Tick these:
 
 | Data type                           | Tick?   | What Job Jet collects                                                                                                                               |
 | ----------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Personally identifiable information | **Yes** | Name, email, phone, city/location, links, and the work and education history from the user's resume and profile.                                    |
-| Health information                  | No      | Never filled or collected. Disability questions are on the never-fill list.                                                                         |
+| Personally identifiable information | **Yes** | Name, email, phone, city/location, links, work and education history, and optional saved answers (notice period, salary expectation, work authorization per country, and voluntary self-identification answers only if the user sets them). |
+| Health information                  | **Yes** | Only if the user chooses to save an answer to voluntary disability self-identification questions (off by default; never sent to AI).                |
 | Financial and payment information   | No      | No payments in the beta.                                                                                                                            |
 | Authentication information          | **Yes** | The Job Jet session token in extension storage, sent only to the Job Jet API. Account passwords are entered on the website, never in the extension. |
 | Personal communications             | No      |                                                                                                                                                     |

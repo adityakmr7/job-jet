@@ -15,17 +15,19 @@ export type FieldForPrompt = {
   options?: string[];
 };
 
-const MatchResultSchema = z.object({
-  matches: z.array(
-    z.object({
-      index: z.number(),
-      // z.enum requires a non-empty tuple; ALLOWED_PROFILE_FIELD_PATHS is a
-      // hand-written non-empty const array, so the cast is just satisfying
-      // TS's inability to narrow a readonly string[] to a tuple type.
-      profileFieldPath: z.enum(ALLOWED_PROFILE_FIELD_PATHS as unknown as [string, ...string[]]).nullable(),
-    })
-  ),
-});
+/** The allowed keys for one request: the fixed list plus this user's
+ *  `custom:<id>` keys. z.enum needs a non-empty tuple; the fixed list is a
+ *  hand-written non-empty const array, so the cast only satisfies TS. */
+function matchResultSchema(keys: string[]) {
+  return z.object({
+    matches: z.array(
+      z.object({
+        index: z.number(),
+        profileFieldPath: z.enum(keys as [string, ...string[]]).nullable(),
+      })
+    ),
+  });
+}
 
 /**
  * Tier 3 of the autofill engine: for fields the heuristic + adapter tiers
@@ -38,22 +40,26 @@ const MatchResultSchema = z.object({
  * meant to answer).
  */
 export async function matchFieldsToProfilePaths(
-  fields: FieldForPrompt[]
+  fields: FieldForPrompt[],
+  customPaths: { path: string; question: string }[] = []
 ): Promise<{ index: number; profileFieldPath: string | null }[]> {
   if (fields.length === 0) return [];
 
-  const allowList = ALLOWED_PROFILE_FIELD_PATHS.map(
-    (key) => `- "${key}": ${PROFILE_FIELD_PATH_DESCRIPTIONS[key]}`
-  ).join("\n");
+  // Custom questions are the user's own text: JSON-encoded so a saved
+  // question can't break out of its list item.
+  const allowList = [
+    ...ALLOWED_PROFILE_FIELD_PATHS.map((key) => `- "${key}": ${PROFILE_FIELD_PATH_DESCRIPTIONS[key]}`),
+    ...customPaths.map((c) => `- "${c.path}": the candidate's saved answer to the question ${JSON.stringify(c.question)}`),
+  ].join("\n");
 
   const { object } = await generateObject({
     model: getModel(),
-    schema: MatchResultSchema,
+    schema: matchResultSchema([...ALLOWED_PROFILE_FIELD_PATHS, ...customPaths.map((c) => c.path)]),
     system:
       "You match job application form fields to a fixed set of known candidate-profile attributes. " +
       "For EACH field given (by its index, using its label/name/placeholder/type/options), decide which " +
       "SINGLE attribute from this exact list it is asking for, or null if none confidently apply " +
-      "(this includes open-ended/essay questions, salary expectations, referral source, EEO/demographic " +
+      "(this includes open-ended/essay questions, EEO/demographic " +
       "questions, and anything ambiguous — when unsure, return null rather than guess):\n\n" +
       allowList +
       "\n\nReturn exactly one result per input field, in the same order, using its index. " +

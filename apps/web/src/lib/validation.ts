@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { LinkSchema, ProfileSchema } from "@job-jet/shared";
+import { ANSWER_LIMITS, LinkSchema, ProfileSchema, sanitizeAnswerText } from "@job-jet/shared";
 import { applicationStatusEnum } from "@/db/schema";
-import { ALLOWED_PROFILE_FIELD_PATHS, type ProfileFieldPath } from "./field-paths";
+import { ALLOWED_PROFILE_FIELD_PATHS, CUSTOM_PATH_PREFIX, type ProfileFieldPath } from "./field-paths";
 
 /**
  * Request validation + size limits for API routes. Limits are generous for
@@ -77,6 +77,27 @@ export const ProfileInputSchema = ProfileSchema.omit({ id: true, userId: true, u
     .default([]),
 });
 
+/** POST /api/profile/answers (extension "Save this answer"). */
+export const SaveAnswersRequestSchema = z.object({
+  answers: z
+    .array(
+      z.object({
+        question: z
+          .string()
+          .max(ANSWER_LIMITS.customQuestion)
+          .transform(sanitizeAnswerText)
+          .pipe(z.string().min(1, "Question can't be empty")),
+        answer: z
+          .string()
+          .max(ANSWER_LIMITS.customAnswer)
+          .transform(sanitizeAnswerText)
+          .pipe(z.string().min(1, "Answer can't be empty")),
+      })
+    )
+    .min(1)
+    .max(20),
+});
+
 /** POST /api/applications (extension upsert). */
 export const ApplicationUpsertSchema = z.object({
   url: z.string().trim().min(1, "Missing url").max(LIMITS.url),
@@ -147,8 +168,14 @@ const TYPE_REQUIRES_PATH: Record<string, ProfileFieldPath[]> = {
   email: ["email"],
   tel: ["phone"],
   url: ["linkedin", "github", "portfolio"],
-  number: ["yearsOfExperience"],
+  number: ["yearsOfExperience", "salaryExpectation"],
+  // Native date inputs only ever take the saved start date (they're in
+  // NEVER_FILL_TYPES for everything else).
+  date: ["earliestStartDate"],
 };
+
+// Custom answers are free text: never into typed inputs.
+const CUSTOM_ANSWER_TYPES = new Set(["text", "textarea", "select", "search", ""]);
 
 /**
  * Guards a mapping decision (cached or fresh from the model) before it's
@@ -157,9 +184,15 @@ const TYPE_REQUIRES_PATH: Record<string, ProfileFieldPath[]> = {
  * across all users, so this stops a bad/poisoned entry from, e.g., putting
  * an email address into a phone input or anything into a file input.
  */
-export function isMappingCompatible(path: string, field: Pick<IncomingField, "type">): path is ProfileFieldPath {
-  if (!ALLOWED_PATHS.has(path)) return false;
+export function isMappingCompatible(
+  path: string,
+  field: Pick<IncomingField, "type">,
+  customPaths: ReadonlySet<string> = new Set()
+): boolean {
   const type = field.type.toLowerCase();
+  if (path.startsWith(CUSTOM_PATH_PREFIX)) return customPaths.has(path) && CUSTOM_ANSWER_TYPES.has(type);
+  if (!ALLOWED_PATHS.has(path)) return false;
+  if (type === "date") return path === "earliestStartDate";
   if (NEVER_FILL_TYPES.has(type)) return false;
   const required = TYPE_REQUIRES_PATH[type];
   if (required && !required.includes(path as ProfileFieldPath)) return false;

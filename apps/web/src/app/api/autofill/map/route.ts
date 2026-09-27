@@ -5,7 +5,7 @@ import { getDb } from "@/db";
 import { profiles, fieldMappings } from "@/db/schema";
 import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
-import { resolveProfileFieldPath } from "@/lib/field-paths";
+import { CUSTOM_PATH_PREFIX, customPathsFor, resolveProfileFieldPath } from "@/lib/field-paths";
 import { matchFieldsToProfilePaths, type FieldForPrompt } from "@/lib/field-mapping-llm";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -79,7 +79,12 @@ export const POST = withErrorHandling("api/autofill/map POST", async (req: Reque
     experience: profileRow.experience ?? [],
     skills: profileRow.skills ?? [],
     workAuthorization: profileRow.workAuthorization ?? undefined,
+    additionalQuestions: profileRow.additionalQuestions ?? undefined,
+    applicationAnswers: profileRow.applicationAnswers ?? undefined,
   };
+
+  const customPaths = customPathsFor(profile);
+  const customPathSet = new Set(customPaths.map((c) => c.path));
 
   const withSignature = fields.map((f) => ({ field: f, signature: computeFieldSignature(f) }));
   const signatures = [...new Set(withSignature.map((w) => w.signature))];
@@ -100,7 +105,7 @@ export const POST = withErrorHandling("api/autofill/map POST", async (req: Reque
     const hit = cacheBySignature.get(w.signature);
     if (hit && isMappingCompatible(hit.profileFieldPath, w.field)) {
       cacheHitSignatures.push(w.signature);
-      const value = resolveProfileFieldPath(profile, hit.profileFieldPath);
+      const value = resolveProfileFieldPath(profile, hit.profileFieldPath, w.field);
       if (value) results.push({ selector: w.field.selector, value });
     } else if (hit) {
       // Invalid/incompatible cached decision — ignore it for this field
@@ -148,17 +153,21 @@ export const POST = withErrorHandling("api/autofill/map POST", async (req: Reque
     }));
 
     try {
-      const matches = await matchFieldsToProfilePaths(forPrompt);
+      const matches = await matchFieldsToProfilePaths(forPrompt, customPaths);
       const newCacheRows: { domain: string; fieldSignature: string; profileFieldPath: string }[] = [];
 
       for (const m of matches) {
         if (!m.profileFieldPath) continue;
         const entry = uncached[m.index];
-        if (!entry || !isMappingCompatible(m.profileFieldPath, entry.field)) continue;
+        if (!entry || !isMappingCompatible(m.profileFieldPath, entry.field, customPathSet)) continue;
         const { field, signature } = entry;
-        newCacheRows.push({ domain, fieldSignature: signature, profileFieldPath: m.profileFieldPath });
+        // Custom answers are this user's own questions: never shared via
+        // the cross-user cache.
+        if (!m.profileFieldPath.startsWith(CUSTOM_PATH_PREFIX)) {
+          newCacheRows.push({ domain, fieldSignature: signature, profileFieldPath: m.profileFieldPath });
+        }
 
-        const value = resolveProfileFieldPath(profile, m.profileFieldPath);
+        const value = resolveProfileFieldPath(profile, m.profileFieldPath, field);
         if (value) results.push({ selector: field.selector, value });
       }
 

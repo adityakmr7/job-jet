@@ -5,7 +5,8 @@ import { profiles } from "@/db/schema";
 import { requireUser } from "@/lib/auth/session";
 import { corsHeaders } from "@/lib/cors";
 import { readJsonBody, withErrorHandling } from "@/lib/http";
-import { ProfileInputSchema } from "@/lib/validation";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { ProfileInputSchema, validationErrorBody } from "@/lib/validation";
 
 // A full profile (many roles, bullets, links) is comfortably under this.
 const MAX_PROFILE_BYTES = 200 * 1024;
@@ -32,13 +33,13 @@ export const PUT = withErrorHandling("api/profile PUT", async (req: Request) => 
   const headers = corsHeaders(req.headers.get("origin"));
   const user = await requireUser(req);
 
+  const limited = await enforceRateLimit(RATE_LIMITS.profileWrite, user.id, headers);
+  if (limited) return limited;
+
   const body = await readJsonBody(req, MAX_PROFILE_BYTES);
   const parsed = ProfileInputSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid profile", issues: parsed.error.flatten() },
-      { status: 400, headers }
-    );
+    return NextResponse.json(validationErrorBody(parsed.error, "Invalid profile"), { status: 400, headers });
   }
 
   const db = getDb();
