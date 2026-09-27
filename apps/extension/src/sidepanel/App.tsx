@@ -9,7 +9,9 @@ import {
   mapFieldsWithLLM,
   listResumes,
   fetchResumeFile,
+  saveCustomAnswers,
 } from "../lib/api";
+import { questionsLeftForUser, readValuesInPage } from "../lib/read-values";
 import { runAutofillMapping, unresolvedFields, toLlmField } from "../lib/autofill-map";
 import { fillFieldsInMainWorld, type FillFile } from "../lib/main-world-fill";
 import { groupByFrame, selectTargetFrames } from "../lib/frames";
@@ -129,6 +131,11 @@ export function App() {
   // no repeat click needed. See the polling effect below for why this is
   // poll-based rather than event-driven.
   const [autoContinue, setAutoContinue] = useState(false);
+  // "Save this answer": questions autofill left for the user, and (once
+  // they've answered them on the page) the answers offered for saving.
+  const [leftForYou, setLeftForYou] = useState<DetectedField[]>([]);
+  const [answerDraft, setAnswerDraft] = useState<{ field: DetectedField; value: string; save: boolean }[] | null>(null);
+  const [savingAnswers, setSavingAnswers] = useState(false);
 
   const profileRef = useRef<Profile | null>(null);
   // The resume tailored in this panel for a given page, preferred over the
@@ -336,6 +343,14 @@ export function App() {
     const resumeFile = resumeInputs.length > 0 ? await resumeToAttach(pageUrl) : null;
 
     const allMapped = [...mapped, ...llmMapped];
+    const filledSelectors = new Set(allMapped.map((m) => m.selector));
+    const left = questionsLeftForUser(fieldsToFill, filledSelectors);
+    setLeftForYou((prev) => {
+      const base = auto ? prev : [];
+      const known = new Set(base.map((f) => f.selector));
+      return [...base, ...left.filter((f) => !known.has(f.selector))];
+    });
+    if (!auto) setAnswerDraft(null);
     if (allMapped.length === 0 && !resumeFile) {
       if (!auto) setStatus("Didn't recognize any fields we could fill on this page.", "warning");
       return;
@@ -386,6 +401,53 @@ export function App() {
         ? "Demographic and open-ended questions still need you"
         : "File uploads, demographic and open-ended questions still need you";
     setStatus(`${prefix}.${resumeNote} ${remaining} — review before submitting.`, "success");
+  }
+
+  /** Reads what the user typed into the questions autofill left open. */
+  async function handleReviewAnswers() {
+    try {
+      const { id: tabId } = await getActiveTab();
+      if (tabId == null) return;
+      const byFrame = new Map<number, DetectedField[]>();
+      for (const f of leftForYou) byFrame.set(f.frameId ?? 0, [...(byFrame.get(f.frameId ?? 0) ?? []), f]);
+      const draft: { field: DetectedField; value: string; save: boolean }[] = [];
+      for (const [frameId, frameFields] of byFrame) {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId, frameIds: [frameId] },
+          func: readValuesInPage,
+          args: [frameFields.map((f) => f.selector)],
+        });
+        const values = (res?.result ?? {}) as Record<string, string>;
+        for (const f of frameFields) if (values[f.selector]) draft.push({ field: f, value: values[f.selector], save: true });
+      }
+      if (draft.length === 0) {
+        setStatus("Answer the questions on the page first, then save them here.", "info");
+        return;
+      }
+      setAnswerDraft(draft);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn't read your answers from the page.", "error");
+    }
+  }
+
+  async function handleSaveAnswers() {
+    if (!answerDraft) return;
+    const chosen = answerDraft
+      .filter((d) => d.save)
+      .map((d) => ({ question: (d.field.question ?? d.field.label ?? "").trim().slice(0, 200), answer: d.value.slice(0, 2000) }));
+    if (chosen.length === 0) return;
+    setSavingAnswers(true);
+    try {
+      const saved = await saveCustomAnswers(getToken, chosen);
+      const savedQuestions = new Set(answerDraft.filter((d) => d.save).map((d) => d.field.selector));
+      setLeftForYou((prev) => prev.filter((f) => !savedQuestions.has(f.selector)));
+      setAnswerDraft(null);
+      setStatus(`Saved ${saved} answer${saved === 1 ? "" : "s"}. Job Jet will fill ${saved === 1 ? "it" : "them"} on the next form.`, "success");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn't save your answers.", "error");
+    } finally {
+      setSavingAnswers(false);
+    }
   }
 
   async function handleAutofill() {
@@ -627,6 +689,80 @@ export function App() {
         )}
       </section>
 
+      {leftForYou.length > 0 && (
+        <section className="card" aria-labelledby="left-heading">
+          <div className="card-head">
+            <h2 id="left-heading" className="eyebrow">
+              Left for you
+            </h2>
+            <span className="chip">{leftForYou.length}</span>
+          </div>
+          {!answerDraft ? (
+            <>
+              <p className="muted small">
+                Answer {leftForYou.length === 1 ? "this question" : "these questions"} on the page, then save your answers
+                so Job Jet fills them next time.
+              </p>
+              <ul className="left-list">
+                {leftForYou.slice(0, 6).map((f) => (
+                  <li key={f.selector}>{f.question ?? f.label}</li>
+                ))}
+                {leftForYou.length > 6 && <li className="muted">and {leftForYou.length - 6} more</li>}
+              </ul>
+              <div className="actions">
+                <button className="btn btn-secondary" onClick={handleReviewAnswers} disabled={busy}>
+                  Save my answers…
+                </button>
+              </div>
+            </>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSaveAnswers();
+              }}
+            >
+              <fieldset className="answer-draft">
+                <legend className="muted small">Save these as answers for next time:</legend>
+                {answerDraft.map((d, i) => (
+                  <label key={d.field.selector} className="answer-row">
+                    <input
+                      type="checkbox"
+                      checked={d.save}
+                      onChange={(e) =>
+                        setAnswerDraft((prev) => prev && prev.map((x, idx) => (idx === i ? { ...x, save: e.target.checked } : x)))
+                      }
+                    />
+                    <span>
+                      <span className="answer-q">{d.field.question ?? d.field.label}</span>
+                      <span className="answer-a">{d.value.length > 120 ? `${d.value.slice(0, 120)}…` : d.value}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <div className="actions">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingAnswers || !answerDraft.some((d) => d.save)}
+                >
+                  {savingAnswers ? <Spinner /> : null}
+                  {savingAnswers ? "Saving…" : `Save ${answerDraft.filter((d) => d.save).length} answer${answerDraft.filter((d) => d.save).length === 1 ? "" : "s"}`}
+                </button>
+                <button type="button" className="link-btn" onClick={() => setAnswerDraft(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+          <p className="small">
+            <a href={`${SYNC_HOST}/dashboard#saved-answers`} target="_blank" rel="noopener noreferrer">
+              Edit saved answers
+            </a>
+          </p>
+        </section>
+      )}
+
       {match && (
         <section className="card" aria-labelledby="match-heading">
           <div className="card-head">
@@ -675,6 +811,10 @@ export function App() {
       <footer className="panel-footer">
         <a href={`${SYNC_HOST}/dashboard`} target="_blank" rel="noopener noreferrer">
           Profile
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href={`${SYNC_HOST}/dashboard#saved-answers`} target="_blank" rel="noopener noreferrer">
+          Saved answers
         </a>
         <span aria-hidden="true">·</span>
         <a href={`${SYNC_HOST}/dashboard/applications`} target="_blank" rel="noopener noreferrer">

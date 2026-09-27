@@ -18,7 +18,14 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/feedback";
-import type { Education, Link, Profile, Skill, WorkExperience } from "@job-jet/shared";
+import type { ApplicationAnswers, Education, Link, Profile, Skill, WorkExperience } from "@job-jet/shared";
+import {
+  CountryAuthList,
+  CustomAnswersSection,
+  SavedAnswersSection,
+  VoluntaryAnswersSection,
+  cleanAnswers,
+} from "./SavedAnswers";
 
 type ProfileForm = Omit<Profile, "id" | "userId" | "updatedAt">;
 
@@ -45,6 +52,11 @@ function computeCompleteness(profile: ProfileForm) {
     { label: "At least one work experience", required: false, ok: profile.experience.length > 0 },
     { label: "At least one school", required: false, ok: profile.education.length > 0 },
     { label: "At least one skill", required: false, ok: profile.skills.length > 0 },
+    {
+      label: "Saved answers (notice period, how you heard)",
+      required: false,
+      ok: !!profile.applicationAnswers?.noticePeriod?.trim() || !!profile.applicationAnswers?.referralSource?.trim(),
+    },
   ];
   const missing = checks.filter((c) => !c.ok);
   return { missing, total: checks.length, filled: checks.length - missing.length };
@@ -63,6 +75,26 @@ function emptyProfile(seed: { fullName?: string; email?: string }): ProfileForm 
     skills: [],
     workAuthorization: { authorizedToWork: undefined, requiresSponsorship: undefined },
     additionalQuestions: {},
+    applicationAnswers: {},
+  };
+}
+
+/** Older profiles kept custom Q&A in `additionalQuestions`; they're shown
+ *  (and saved) as custom answers from now on. */
+function withMigratedAnswers(p: ProfileForm): ProfileForm {
+  const legacy = Object.entries(p.additionalQuestions ?? {}).filter(([q, a]) => q.trim() && a.trim());
+  const answers: ApplicationAnswers = p.applicationAnswers ?? {};
+  if (legacy.length === 0) return { ...p, applicationAnswers: answers };
+  return {
+    ...p,
+    additionalQuestions: {},
+    applicationAnswers: {
+      ...answers,
+      customAnswers: [
+        ...(answers.customAnswers ?? []),
+        ...legacy.map(([question, answer]) => ({ id: crypto.randomUUID(), question, answer })),
+      ],
+    },
   };
 }
 
@@ -90,8 +122,8 @@ export function ProfileEditor({
   /** True when the initial values haven't been saved yet (e.g. prefilled from a resume). */
   startDirty?: boolean;
 }) {
-  const [profile, setProfile] = useState<ProfileForm>(
-    initialProfile ?? emptyProfile({ fullName: defaultName, email: defaultEmail })
+  const [profile, setProfile] = useState<ProfileForm>(() =>
+    withMigratedAnswers(initialProfile ?? emptyProfile({ fullName: defaultName, email: defaultEmail }))
   );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -118,7 +150,7 @@ export function ProfileEditor({
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({ ...profile, applicationAnswers: cleanAnswers(profile.applicationAnswers) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -209,6 +241,8 @@ export function ProfileEditor({
   }
 
   const completeness = computeCompleteness(profile);
+  const answers: ApplicationAnswers = profile.applicationAnswers ?? {};
+  const setAnswers = (next: ApplicationAnswers) => update("applicationAnswers", next);
 
   const percent = Math.round((completeness.filled / completeness.total) * 100);
 
@@ -368,7 +402,7 @@ export function ProfileEditor({
           id={fid("auth")}
           icon={<BadgeCheck className="w-4 h-4" aria-hidden />}
           title="Work authorization"
-          description="Answered once, reused on every form that asks."
+          description="Your default answers, reused on every form that asks."
         />
         <div className="grid sm:grid-cols-2 gap-3">
           {(
@@ -391,7 +425,22 @@ export function ProfileEditor({
             </label>
           ))}
         </div>
+        <CountryAuthList
+          fid={fid}
+          value={answers.workAuthorizationByCountry ?? []}
+          onChange={(next) => setAnswers({ ...answers, workAuthorizationByCountry: next })}
+        />
       </Card>
+
+      <SavedAnswersSection fid={fid} value={answers} onChange={setAnswers} />
+
+      <CustomAnswersSection
+        fid={fid}
+        value={answers.customAnswers ?? []}
+        onChange={(next) => setAnswers({ ...answers, customAnswers: next })}
+      />
+
+      <VoluntaryAnswersSection fid={fid} value={answers} onChange={setAnswers} />
 
       <Card aria-labelledby={fid("experience")}>
         <CardHeader

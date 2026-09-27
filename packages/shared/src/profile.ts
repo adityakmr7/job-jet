@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ApplicationAnswersSchema } from "./answers";
 
 /**
  * The canonical, structured representation of a user's professional
@@ -63,6 +64,8 @@ export const ProfileSchema = z.object({
     .record(z.string(), z.string())
     .optional()
     .describe("Free-form Q&A pairs the user has answered before, keyed by a normalized question string, reused as suggestions for similar questions on new forms."),
+  // Saved answers for recurring application questions (see answers.ts).
+  applicationAnswers: ApplicationAnswersSchema.optional(),
   updatedAt: z.string().optional(),
 });
 

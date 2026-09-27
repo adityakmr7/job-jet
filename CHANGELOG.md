@@ -8,6 +8,61 @@ The Chrome extension (`apps/extension`) and web app (`apps/web`) share one versi
 
 ## [Unreleased]
 
+### Added — saved answers bank
+
+- **Saved answers** in the dashboard profile (`/dashboard#saved-answers`):
+  how you heard about the company (default answer), notice period, earliest
+  start date, salary expectation (amount, currency, per year/month/hour),
+  willingness to relocate, preferred work modes in order, and years of
+  experience.
+- **Work authorization by country**: a list of countries, each with
+  "authorized to work" and "needs sponsorship". When a question names a
+  country (Poland, Canada, the UK, India, the US and about 25 others), the
+  matching entry is used. The existing single answers stay the default for
+  questions that don't name a country. If you keep a list and the question
+  names a country that isn't on it, the question is left for you.
+- **Your own questions**: free-form question and answer pairs. A form
+  question is matched when it contains every meaningful word of your saved
+  question; the most specific match wins. Old `additionalQuestions` entries
+  move into this list the next time you save your profile.
+- **Voluntary questions**: pronouns plus gender, race/ethnicity,
+  Hispanic/Latino, veteran, disability, LGBTQ+, transgender and sexual
+  orientation. Each defaults to **Never fill**. You can pick "Decline to
+  answer", which selects the form's decline option, or set your own answer.
+  Nothing is filled unless you choose to.
+- Autofill uses these answers on Greenhouse, Lever, Ashby and Workable text
+  fields, selects, radios, comboboxes and date pickers. For example, a
+  salary is converted between yearly and monthly, a date picker gets today
+  plus your notice period, notice-period dropdowns are matched, and
+  years-of-experience ranges are picked.
+- The AI tier can use saved answers as allowed facts (`referralSource`,
+  `noticePeriod`, `earliestStartDate`, `salaryExpectation`,
+  `willingToRelocate`, `workMode` and your own `custom:<id>` questions).
+  Voluntary answers and pronouns are never offered to the model. Mappings to
+  your own questions are never written to the shared cache.
+- The side panel has a new **Left for you** card that lists questions
+  autofill didn't answer. **Save my answers…** reads what you typed into
+  those fields and saves the ones you tick to your questions
+  (`POST /api/profile/answers`). An **Edit saved answers** link opens the
+  dashboard section.
+
+### Changed
+
+- `PUT /api/profile` is rate-limited (shares a new `profileWrite` limit of
+  120 writes per hour with `/api/profile/answers`) and returns field-level
+  validation errors. All saved-answer text is trimmed, stripped of control
+  characters and length-capped.
+- `yearsOfExperience` for the AI tier now uses the saved value, or the span
+  of your work history. It used to return the number of roles.
+
+### Database
+
+- Migration `0003_add_application_answers` adds a nullable
+  `profiles.application_answers` jsonb column. It is backwards compatible,
+  and it **must be applied to production** (`npm run db:migrate:env
+  --workspace=apps/web` with the production `DATABASE_URL`) before this
+  build of the web app is deployed.
+
 ## [0.4.0-beta] - 2026-09-27
 
 First Chrome Web Store build, published **Unlisted** as a beta for invited

@@ -26,6 +26,9 @@ export const RATE_LIMITS = {
   resumeParse: { name: "resume-parse", limit: 10, windowMs: HOUR },
   resumeTailor: { name: "resume-tailor", limit: 20, windowMs: HOUR },
   autofillMap: { name: "autofill-map", limit: 60, windowMs: HOUR },
+  // Profile saves (dashboard Save, extension "Save this answer"). Generous
+  // for real editing; bounds how often one account can rewrite its row.
+  profileWrite: { name: "profile-write", limit: 120, windowMs: HOUR },
 } satisfies Record<string, RateLimitRule>;
 
 export interface RateLimitResult {

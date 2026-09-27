@@ -24,9 +24,9 @@ export default function PrivacyPage() {
       <h3>Account information</h3>
       <p>
         We store accounts in our own database: your name, email address, whether your email is verified, and — if you
-        sign up with a password — a salted, one-way hash of your password (never the password itself). We also keep
-        your active sign-in sessions (with the device&apos;s IP address and browser user agent) so you can see and sign
-        out of them in Account settings.
+        sign up with a password — a salted, one-way hash of your password (never the password itself). We also keep your
+        active sign-in sessions (with the device&apos;s IP address and browser user agent) so you can see and sign out
+        of them in Account settings.
       </p>
       <p>
         If you choose <strong>Continue with Google</strong>, sign-in happens through Google OAuth: Google shares your
@@ -38,6 +38,15 @@ export default function PrivacyPage() {
         Information you enter or that is parsed from your resume: name, email, phone number, location, links (e.g.
         LinkedIn, GitHub, portfolio), summary, education, work experience, skills, and your answers to common
         application questions such as work authorization and visa sponsorship.
+      </p>
+      <p>
+        If you choose to fill in <strong>Saved answers</strong>, we also store those answers: how you heard about a
+        company, notice period and earliest start date, salary expectation, willingness to relocate, preferred work
+        mode, years of experience, work authorization and sponsorship needs per country, and any questions and answers
+        you add yourself. Under <strong>Voluntary questions</strong> you may optionally store pronouns and answers to
+        voluntary self-identification questions (such as gender, race or ethnicity, veteran status, disability status or
+        sexual orientation). These are off by default. We store them only if you set them, use them only to fill forms
+        you choose to autofill, never send them to an AI provider, and you can clear them at any time.
       </p>
       <h3>Resumes</h3>
       <p>
@@ -74,13 +83,13 @@ export default function PrivacyPage() {
           use a feature described above (autofill or resume tailoring).
         </li>
         <li>
-          <strong>scripting:</strong> to read the form fields on the current page and fill them with your
-          profile when you click Autofill (or when you turn on auto-continue for multi-step forms).
+          <strong>scripting:</strong> to read the form fields on the current page and fill them with your profile when
+          you click Autofill (or when you turn on auto-continue for multi-step forms).
         </li>
         <li>
-          <strong>storage:</strong> to keep the extension signed in. When you connect the extension from the{" "}
-          {SITE_NAME} website, it receives a session token for your account that is kept in the extension&apos;s own
-          storage (not readable by websites) until you sign out or disconnect it from Account settings.
+          <strong>storage:</strong> to keep the extension signed in. When you connect the extension from the {SITE_NAME}{" "}
+          website, it receives a session token for your account that is kept in the extension&apos;s own storage (not
+          readable by websites) until you sign out or disconnect it from Account settings.
         </li>
         <li>
           <strong>sidePanel:</strong> to show the {SITE_NAME} panel next to the page you are applying on.
@@ -120,7 +129,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Autofill matching:</strong> form field descriptions only (labels, names, placeholders, types, options)
-          — not your profile values.
+          — not your profile values. If you have added your own saved questions, the question text you wrote (not the
+          answer) is included so the model can recognize a matching field.
         </li>
       </ul>
       <p>
@@ -134,8 +144,8 @@ export default function PrivacyPage() {
       <h2>Where your data is stored (service providers)</h2>
       <ul>
         <li>
-          <strong>Neon</strong> — PostgreSQL database for your account, sessions, profile, resume content, and application
-          tracker.
+          <strong>Neon</strong> — PostgreSQL database for your account, sessions, profile, resume content, and
+          application tracker.
         </li>
         <li>
           <strong>Vercel</strong> — hosting of the web app and API, and Vercel Blob private storage for resume files.
@@ -157,9 +167,9 @@ export default function PrivacyPage() {
       <p>
         We keep your data while your account is active. You can edit your profile and delete tracked applications in the
         dashboard at any time. To delete your account and all associated data (profile, resumes, resume files, and
-        applications), use <strong>Delete account</strong> in Account settings — it takes effect immediately — or email us
-        at {CONTACT_EMAIL} and we will delete it within 30 days. Rate-limit counters are deleted
-        automatically; the shared autofill cache contains no personal data.
+        applications), use <strong>Delete account</strong> in Account settings — it takes effect immediately — or email
+        us at {CONTACT_EMAIL} and we will delete it within 30 days. Rate-limit counters are deleted automatically; the
+        shared autofill cache contains no personal data.
       </p>
 
       <h2>Your rights</h2>

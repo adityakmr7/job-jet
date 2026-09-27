@@ -121,6 +121,23 @@ describe("isMappingCompatible", () => {
     }
   });
 
+  it("date inputs take only the saved start date; numbers take years or salary", () => {
+    expect(isMappingCompatible("earliestStartDate", { type: "date" })).toBe(true);
+    expect(isMappingCompatible("noticePeriod", { type: "date" })).toBe(false);
+    expect(isMappingCompatible("salaryExpectation", { type: "number" })).toBe(true);
+    expect(isMappingCompatible("referralSource", { type: "number" })).toBe(false);
+  });
+
+  it("custom keys: only this request's own, only into free-text fields", () => {
+    const own = new Set(["custom:c1"]);
+    expect(isMappingCompatible("custom:c1", { type: "textarea" }, own)).toBe(true);
+    expect(isMappingCompatible("custom:c1", { type: "select" }, own)).toBe(true);
+    expect(isMappingCompatible("custom:c1", { type: "email" }, own)).toBe(false);
+    expect(isMappingCompatible("custom:c2", { type: "text" }, own)).toBe(false);
+    // A cached (shared) mapping never carries a custom key.
+    expect(isMappingCompatible("custom:c1", { type: "text" })).toBe(false);
+  });
+
   it("enforces type-specific paths", () => {
     expect(isMappingCompatible("email", { type: "email" })).toBe(true);
     expect(isMappingCompatible("phone", { type: "email" })).toBe(false);

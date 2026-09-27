@@ -22,6 +22,13 @@
       "when": 1790335078240,
       "tag": "0002_better_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790505785023,
+      "tag": "0003_add_application_answers",
+      "breakpoints": true
     }
   ]
 }

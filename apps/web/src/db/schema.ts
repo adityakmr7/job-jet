@@ -19,6 +19,7 @@ import type {
   WorkExperience,
   Skill,
   ResumeContent,
+  ApplicationAnswers,
 } from "@job-jet/shared";
 
 // --- Better Auth tables ------------------------------------------------------
@@ -132,6 +133,9 @@ export const profiles = pgTable("profiles", {
     requiresSponsorship?: boolean;
   }>(),
   additionalQuestions: jsonb("additional_questions").$type<Record<string, string>>(),
+  // Saved answers for recurring application questions (0003 migration;
+  // nullable, so existing rows and older clients are unaffected).
+  applicationAnswers: jsonb("application_answers").$type<ApplicationAnswers>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

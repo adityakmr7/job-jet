@@ -44,6 +44,22 @@ export async function fetchProfile(getToken: TokenGetter): Promise<Profile | nul
   return body.profile;
 }
 
+/** Adds (or updates) custom saved answers on the user's profile —
+ *  the side panel's "Save this answer". Returns how many were saved. */
+export async function saveCustomAnswers(
+  getToken: TokenGetter,
+  answers: { question: string; answer: string }[]
+): Promise<number> {
+  const res = await authedFetch(getToken, "/api/profile/answers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Couldn't save your answers (${res.status})`);
+  return typeof body.saved === "number" ? body.saved : answers.length;
+}
+
 type ResumeRecord = { id: string; fileName: string };
 
 /** Generates a resume tailored to `jobDescription` from the user's saved

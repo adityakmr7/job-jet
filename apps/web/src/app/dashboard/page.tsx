@@ -37,6 +37,7 @@ export default async function DashboardPage() {
                 skills: profile.skills ?? [],
                 workAuthorization: profile.workAuthorization ?? undefined,
                 additionalQuestions: profile.additionalQuestions ?? undefined,
+                applicationAnswers: profile.applicationAnswers ?? undefined,
               }
             : null
         }

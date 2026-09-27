@@ -1,5 +1,16 @@
 import type { DetectedField, Profile } from "@job-jet/shared";
+import { workAuthFor } from "@job-jet/shared/answer-helpers";
 import { firstAndLastName, findLink, yesNo } from "./profile-utils";
+import {
+  REFERRAL,
+  answersOf,
+  customAnswer,
+  demographicAnswer,
+  questionText,
+  recurringAnswer,
+  valueFor,
+  type SavedAnswer,
+} from "./saved-answers";
 import { parseLocation } from "./location";
 import { getAdapter } from "./adapters";
 
@@ -11,9 +22,11 @@ import { getAdapter } from "./adapters";
  *
  * Deliberately does NOT fill: voluntary EEO / demographic self-
  * identification fields (see NEVER_FILL) — opt-in disclosures the user
- * should answer themselves. Also doesn't attempt file inputs here (the
- * side panel attaches the stored resume separately) or free-text fields
- * with no profile-backed source (salary, notice period, "how did you hear").
+ * should answer themselves — unless the user explicitly saved an answer
+ * for that question (Profile -> Saved answers; see saved-answers.ts).
+ * Also doesn't attempt file inputs here (the side panel attaches the
+ * stored resume separately). Salary, notice period, "how did you hear"
+ * and custom questions come from the user's saved answers only.
  *
  * Every rule below was tightened after a live run against real Greenhouse,
  * Lever, Ashby and Workable postings found it firing on the wrong
@@ -112,13 +125,16 @@ export interface MapResult {
  *  authorization: "Do you need a visa or work permit?" mentions a work
  *  permit but is a sponsorship question (live on a Lever EU posting). */
 export function yesNoAnswer(field: DetectedField, profile: Profile): string | undefined {
-  if (matches(field, SPONSORSHIP)) return yesNo(profile.workAuthorization?.requiresSponsorship);
-  if (matches(field, WORK_AUTH)) return yesNo(profile.workAuthorization?.authorizedToWork);
-  return undefined;
+  const isSponsorship = matches(field, SPONSORSHIP);
+  if (!isSponsorship && !matches(field, WORK_AUTH)) return undefined;
+  // The country the question names picks the saved per-country answer;
+  // no country named -> the profile's default answer.
+  const auth = workAuthFor(questionText(field), profile.workAuthorization, answersOf(profile).workAuthorizationByCountry);
+  return yesNo(isSponsorship ? auth?.requiresSponsorship : auth?.authorizedToWork);
 }
 
 const SPONSORSHIP =
-  /sponsor|require.{0,40}visa|visa.{0,20}(status|required|needed|support)|need.{0,20}(a )?(visa|work permit)|petition|employment.?based (visa|status|immigration)|immigration (support|sponsorship|status)|h-?1b/i;
+  /sponsor|\bvisa (permission|requirement)|require.{0,40}visa|visa.{0,20}(status|required|needed|support)|need.{0,20}(a )?(visa|work permit)|petition|employment.?based (visa|status|immigration)|immigration (support|sponsorship|status)|h-?1b/i;
 const WORK_AUTH =
   /authori[sz].{0,40}work|work.{0,40}authori[sz]|right.{0,10}to.{0,10}work|work.?permit|eligib.{0,40}work|legally.{0,30}(work|employ)|permitted to work|entitled to work/i;
 
@@ -134,6 +150,11 @@ function polarity(text: string | undefined): Polarity {
  *  that actually matches the answer is emitted. The old code gave every
  *  radio of a group the same "Yes" and let the last one win. */
 function mapChoiceField(field: DetectedField, profile: Profile): string | undefined {
+  if (yesNoAnswer(field, profile) === undefined && (field.question || field.type === "yesno")) {
+    // Not a work-authorization question: a saved answer, if any.
+    const saved = recurringAnswer(field, profile) ?? customAnswer(field, profile);
+    return saved ? valueFor(field, saved) : undefined;
+  }
   if (!field.question && field.type !== "yesno") {
     // A lone checkbox whose own label is the statement
     // ("I am legally authorized to work in the US") — tick it only when the
@@ -146,16 +167,6 @@ function mapChoiceField(field: DetectedField, profile: Profile): string | undefi
   if (field.type === "yesno") return answer;
   const option = polarity(field.label);
   return option && option === polarity(answer) ? answer : undefined;
-}
-
-function yearsOfExperience(profile: Profile): string | undefined {
-  const starts = profile.experience
-    .map((e) => e.startDate)
-    .filter((d): d is string => !!d && /^\d{4}/.test(d))
-    .map((d) => Number(d.slice(0, 4)));
-  if (starts.length === 0) return undefined;
-  const years = new Date().getFullYear() - Math.min(...starts);
-  return years > 0 ? String(years) : undefined;
 }
 
 /** @param allFields every field on the form (defaults to `fields`) — the
@@ -182,6 +193,13 @@ export function mapProfileToFields(
 
   for (const field of fields) {
     if (field.type === "file") continue; // resume attach is a separate step
+    // Voluntary disclosures: only the user's own explicit answer.
+    const demographic = demographicAnswer(field, profile);
+    if (demographic) {
+      const value = valueFor(field, demographic);
+      if (value) results.push({ selector: field.selector, value });
+      continue;
+    }
     if (matches(field, NEVER_FILL)) continue;
 
     if (CHOICE_TYPES.has(field.type)) {
@@ -192,6 +210,10 @@ export function mapProfileToFields(
 
     const label = labelText(field);
     let value: string | undefined;
+    // Recurring questions answered from the user's saved answers. Checked
+    // before the link/company rules: "How did you hear about us (LinkedIn,
+    // referral…)?" must not get the LinkedIn URL.
+    const saved: SavedAnswer | undefined = yesNoAnswer(field, profile) === undefined ? recurringAnswer(field, profile) : undefined;
 
     // "Legal Name" is Ashby's actual label for this field on a real, live
     // posting; "full name" alone missed it. Bare "Name" is accepted only as
@@ -208,6 +230,12 @@ export function mapProfileToFields(
       value = matches(field, /refer|reference|manager/i) ? undefined : profile.email;
     } else if (field.type === "tel" || matches(field, /phone|mobile/i)) {
       value = matches(field, /refer|reference|emergency/i) ? undefined : profile.phone;
+    } else if (saved) {
+      value = valueFor(field, saved);
+    } else if (matches(field, REFERRAL)) {
+      // A referral-source question without a saved answer: nothing else
+      // (company, LinkedIn…) should answer it.
+      value = undefined;
     } else if (yesNoAnswer(field, profile) !== undefined && (field.type === "select" || field.type === "text")) {
       // Work authorization / sponsorship as a dropdown (Greenhouse
       // react-select, Lever <select>) or short text answer.
@@ -265,14 +293,18 @@ export function mapProfileToFields(
       mostRecentJob
     ) {
       value = mostRecentJob.title;
-    } else if (matches(field, /years.*experience/i) && field.type !== "textarea") {
-      value = yearsOfExperience(profile);
     } else if (matches(field, /school|university|college|institution/i) && label.length <= 60 && mostRecentEducation) {
       value = mostRecentEducation.school;
     } else if (matches(field, /degree/i) && label.length <= 60 && mostRecentEducation) {
       value = mostRecentEducation.degree;
     } else if (matches(field, /discipline|field.?of.?study|\bmajor\b/i) && mostRecentEducation) {
       value = mostRecentEducation.fieldOfStudy;
+    }
+
+    // Nothing built in answered it: the user's own custom Q&A.
+    if (!value && !saved) {
+      const custom = customAnswer(field, profile);
+      if (custom) value = valueFor(field, custom);
     }
 
     if (value) results.push({ selector: field.selector, value });
