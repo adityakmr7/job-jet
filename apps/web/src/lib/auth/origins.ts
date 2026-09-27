@@ -36,6 +36,12 @@ export function resolveTrustedOrigins(
       // Misconfigured BETTER_AUTH_URL — Better Auth itself reports this.
     }
   }
+  if (env.VERCEL_PROJECT_PRODUCTION_URL) {
+    origins.add(`https://${env.VERCEL_PROJECT_PRODUCTION_URL.trim()}`);
+  }
+  if (env.VERCEL_URL) {
+    origins.add(`https://${env.VERCEL_URL.trim()}`);
+  }
   for (const id of parseList(env.ALLOWED_EXTENSION_IDS)) {
     if (isValidExtensionId(id)) origins.add(`chrome-extension://${id}`);
   }
