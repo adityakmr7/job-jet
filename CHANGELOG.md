@@ -8,6 +8,54 @@ The Chrome extension (`apps/extension`) and web app (`apps/web`) share one versi
 
 ## [Unreleased]
 
+## [0.4.0-beta] - 2026-09-27
+
+First Chrome Web Store build, published **Unlisted** as a beta for invited
+testers. The manifest has `version` `0.4.0` and `version_name` `0.4.0 beta`.
+
+### Fixed (autofill, from live testing on 18 Greenhouse, Lever, Ashby and Workable postings)
+
+- Question labels are read from `aria-labelledby`, `label[for]`, wrapping
+  labels and the nearest question title (Lever, Ashby, Workable, Greenhouse,
+  fieldset legends). Radios and checkboxes keep their option text separately
+  from the group question.
+- Visually hidden radios and checkboxes that have a visible stand-in are no
+  longer dropped as honeypots. Ashby Yes/No button questions are detected
+  and answered.
+- Type-to-search location comboboxes (Greenhouse, Ashby, Lever) are filled
+  only when exactly one suggestion matches; otherwise they are left empty.
+- The name rule skips referral, recruiter, emergency-contact, reference,
+  manager and preferred-name questions.
+- Street and zip are never filled from the location string. City, state and
+  country are filled only when they can be derived. Country selects get the
+  derived country.
+- GitHub is filled only into URL, profile or username fields. Company is not
+  filled into size, industry or preference questions.
+- A radio is ticked only when the option itself matches the answer, and
+  nothing is ever unticked.
+- More sensitive questions are never filled: sexual orientation, gender
+  identity, ethnicity, disability, veteran status, religion, marital status,
+  national origin, age and caste.
+- Work authorization and sponsorship answers reach Yes/No dropdowns, radios
+  and buttons.
+- "Other website" is no longer a copy of the portfolio URL.
+
+### Added
+
+- Application forms inside embedded ATS iframes (for example Greenhouse on
+  careers.airbnb.com) can be detected and filled. Content scripts now run in
+  all frames but stay inert outside the top frame unless the frame is a
+  known ATS host.
+- The stored or tailored resume is attached to the form's own resume input.
+  It is never put into an "autofill from resume" importer and never
+  replaces a file you already picked.
+
+### Changed
+
+- The floating button appears only when there is real application-form
+  evidence. It no longer shows on captcha, sign-in or job-description pages
+  just because the host is a known ATS.
+
 ## [0.3.0] - 2026-09-25
 
 ### Changed
@@ -177,7 +225,8 @@ First public release.
     the extension for the Chrome Web Store.
   - MIT license.
 
-[Unreleased]: https://github.com/adityakmr7/job-jet/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/adityakmr7/job-jet/compare/v0.4.0-beta...HEAD
+[0.4.0-beta]: https://github.com/adityakmr7/job-jet/compare/v0.3.0...v0.4.0-beta
 [0.3.0]: https://github.com/adityakmr7/job-jet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/adityakmr7/job-jet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adityakmr7/job-jet/releases/tag/v0.1.0
