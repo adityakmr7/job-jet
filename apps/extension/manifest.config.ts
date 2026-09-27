@@ -19,7 +19,11 @@ export default defineManifest((configEnv: ConfigEnv) => {
     short_name: "Job Jet",
     description:
       "Autofill job applications on any careers site, tailor your resume to each role, and track every application you send.",
+    // `version` must be dot-separated integers (the store compares it);
+    // `version_name` is what users see. Drop the suffix for the stable
+    // release (see CHANGELOG / store-assets/LISTING.md).
     version: pkg.version,
+    version_name: `${pkg.version} beta`,
     icons: {
       16: "icons/icon16.png",
       32: "icons/icon32.png",
