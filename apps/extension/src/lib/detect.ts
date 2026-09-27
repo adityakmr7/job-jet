@@ -43,7 +43,17 @@ const KNOWN_ATS_HOSTS = [
 // so production builds exclude the production domain automatically.
 const BACKEND_URL: string | undefined = import.meta.env.VITE_API_BASE_URL;
 
-const URL_KEYWORDS = ["job", "career", "apply", "position", "opening", "vacanc"];
+// Match URL path/subdomain segments representing jobs/careers, avoiding false
+// positives on project/brand names like "job-jet" or "steve-jobs".
+const URL_PATH_PATTERNS = [
+  /\/(jobs?|careers?|positions?|openings?|vacanc\w*|apply)(\/|$|\?|#|-)/i,
+  /^(jobs?|careers?)\./i,
+];
+
+// Title keywords: whole words only to avoid accidental substring matches.
+const TITLE_PATTERNS = [
+  /\b(careers?|jobs?|job opening|open positions?|apply now|application form)\b/i,
+];
 
 const PAGE_TEXT_KEYWORDS = [
   "apply now",
@@ -163,16 +173,25 @@ export function embeddedAtsFrames(doc: Document): string[] {
     });
 }
 
-/** Actual application-form evidence on the page. Found live: the floating
- *  button showed on a SmartRecruiters "Verification Required" captcha page
- *  and on Workday/iCIMS job-description pages with no form at all, because a
- *  known ATS hostname alone used to be enough. A sign-in wall (password
- *  field, no application fields) isn't an application form either. */
-function hasApplicationForm(signal: ReturnType<typeof collectFormSignal>, embedded: number): boolean {
+/** Actual application-form evidence on the page.
+ * For known ATS domains, having 3+ text inputs or file upload is sufficient
+ * unless it's a sign-in wall.
+ * For generic/unknown domains, require at least 1 job-specific field keyword
+ * OR a file upload with inputs, so generic forms (settings, signup, search)
+ * are never falsely flagged. */
+function hasApplicationForm(
+  signal: ReturnType<typeof collectFormSignal>,
+  embedded: number,
+  isKnownAts: boolean
+): boolean {
   if (embedded > 0) return true;
   const { fieldHits, textInputCount, hasFileUpload, hasPassword } = signal;
   if (hasPassword && fieldHits === 0 && !hasFileUpload) return false;
-  return hasFileUpload || fieldHits > 0 || textInputCount >= 3;
+  if (isKnownAts) {
+    return hasFileUpload || fieldHits > 0 || textInputCount >= 3;
+  }
+  // Generic websites: require explicit job-related fields or a file upload + inputs
+  return fieldHits >= 1 || (hasFileUpload && textInputCount >= 2);
 }
 
 /**
@@ -207,10 +226,12 @@ export function detectJobApplication(
     }
   }).length;
 
-  if (hostMatches(hostname)) {
+  const isAts = hostMatches(hostname);
+
+  if (isAts) {
     signals.push(`known-ats:${hostname}`);
     const signal = collectFormSignal(doc);
-    if (!hasApplicationForm(signal, embedded)) {
+    if (!hasApplicationForm(signal, embedded, true)) {
       signals.push("no-application-form");
       return { isJobApplication: false, confidence: 0.3, signals, hasFileUpload: signal.hasFileUpload };
     }
@@ -224,14 +245,14 @@ export function detectJobApplication(
 
   let score = 0;
 
-  const url = href.toLowerCase();
-  if (URL_KEYWORDS.some((kw) => url.includes(kw))) {
-    score += 1;
+  const pathnameAndHost = `${pageUrl.hostname}${pageUrl.pathname}`;
+  if (URL_PATH_PATTERNS.some((pat) => pat.test(pathnameAndHost))) {
+    score += 1.5;
     signals.push("url-keyword");
   }
 
-  const title = doc.title.toLowerCase();
-  if (URL_KEYWORDS.some((kw) => title.includes(kw))) {
+  const title = doc.title;
+  if (TITLE_PATTERNS.some((pat) => pat.test(title))) {
     score += 1;
     signals.push("title-keyword");
   }
@@ -239,38 +260,32 @@ export function detectJobApplication(
   const bodyText = doc.body?.innerText?.toLowerCase().slice(0, 20000) ?? "";
   const textHits = PAGE_TEXT_KEYWORDS.filter((kw) => bodyText.includes(kw)).length;
   if (textHits > 0) {
-    score += Math.min(textHits, 3); // cap contribution
+    score += Math.min(textHits * 0.8, 2.5); // cap contribution
     signals.push(`page-text-keywords:${textHits}`);
   }
 
   const formSignal = collectFormSignal(doc);
   const { fieldHits, textInputCount, hasFileUpload } = formSignal;
   if (fieldHits > 0) {
-    score += fieldHits * 1.5;
+    score += fieldHits * 2;
     signals.push(`field-keywords:${fieldHits}`);
   }
   if (hasFileUpload) {
     score += 2;
     signals.push("file-upload-present");
   }
-  if (textInputCount >= 4) {
-    score += 1;
+  if (textInputCount >= 3) {
+    score += Math.min(textInputCount * 0.3, 1.5);
     signals.push(`text-input-count:${textInputCount}`);
   }
 
   // Normalize to a rough 0-1 confidence.
-  const confidence = Math.min(score / 8, 1);
+  const confidence = Math.min(score / 7, 1);
 
-  // Page-text keywords alone can cross the threshold on a page that just
-  // *talks about* job applications (a careers-product marketing page
-  // mentioning "resume", "job description", "work authorization" reads
-  // almost identically to a real one by text alone) — caught by dogfooding
-  // this on Job Jet's own landing page, which has zero real form fields.
-  // Require actual form-field evidence too: text signals alone are never
-  // sufficient, only a multiplier on top of a page that has a plausible
-  // application form on it.
-  const hasFormEvidence = hasApplicationForm(formSignal, 0);
-  const isJobApplication = confidence >= 0.4 && hasFormEvidence;
+  // For generic websites, text signals alone are never sufficient.
+  // We strictly require actual job application form evidence.
+  const hasFormEvidence = hasApplicationForm(formSignal, 0, false);
+  const isJobApplication = confidence >= 0.45 && hasFormEvidence;
 
   return { isJobApplication, confidence, signals, hasFileUpload };
 }
