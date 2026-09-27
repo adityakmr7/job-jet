@@ -80,6 +80,39 @@ describe("detectJobApplication against fixture pages", () => {
     expect(result.confidence).toBeGreaterThanOrEqual(0.4);
     expect(result.isJobApplication).toBe(false);
   });
+
+  it("does not flag Vercel dashboard or settings pages containing project name 'job-jet-web'", () => {
+    const doc = new DOMParser().parseFromString(
+      `<title>Environment Variables – job-jet-web – Vercel</title>
+       <body>
+         <input type="text" placeholder="Key" name="key" />
+         <input type="text" placeholder="Value" name="value" />
+         <input type="text" placeholder="Search..." name="search" />
+         <p>Deployment created. BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, NEXT_PUBLIC_EXTENSION_URL</p>
+       </body>`,
+      "text/html"
+    );
+    const result = detectJobApplication(
+      doc,
+      "https://vercel.com/adityakmr7/job-jet-web/settings/environment-variables",
+      DEV_BACKEND
+    );
+    expect(result.isJobApplication).toBe(false);
+  });
+
+  it("does not flag general contact forms or settings forms without job fields", () => {
+    const doc = new DOMParser().parseFromString(
+      `<title>Contact Us</title>
+       <body>
+         <input type="text" name="subject" placeholder="Subject" />
+         <textarea name="message" placeholder="Your message"></textarea>
+         <input type="email" name="email" placeholder="Email" />
+       </body>`,
+      "text/html"
+    );
+    const result = detectJobApplication(doc, "https://example.com/contact", DEV_BACKEND);
+    expect(result.isJobApplication).toBe(false);
+  });
 });
 
 describe("detectJobApplication host rules", () => {
