@@ -11,7 +11,8 @@
 import { queryAllDeep } from "./dom-deep";
 import { isOwnAppHost } from "./own-app";
 
-// Known ATS hostnames — fast path, skips scoring entirely.
+// Known ATS hostnames — fast path that skips scoring, though the page must
+// still actually contain an application form (see hasApplicationForm).
 const KNOWN_ATS_HOSTS = [
   "greenhouse.io",
   "boards.greenhouse.io",
@@ -99,15 +100,33 @@ export function scoreFieldKeywords(text: string): number {
   return hits;
 }
 
-function collectFormSignal(doc: Document): { fieldHits: number; textInputCount: number; hasFileUpload: boolean } {
+function collectFormSignal(doc: Document): {
+  fieldHits: number;
+  textInputCount: number;
+  hasFileUpload: boolean;
+  hasPassword: boolean;
+} {
   // queryAllDeep, not a plain querySelectorAll — a real ATS found during
   // testing (SmartRecruiters) renders its actual fields entirely inside
   // open shadow roots, invisible to a top-level query. See dom-deep.ts.
   const inputs = queryAllDeep(doc, "input, textarea, select");
+  // Search boxes (job-search bars, cookie-banner vendor search) aren't form
+  // fields even when typed as text — found live: an iCIMS job page reached
+  // the ≥3 threshold on keyword/location/cookie-list search inputs alone.
+  const isSearchBox = (el: Element) =>
+    /search|query|keyword/i.test(
+      [el.getAttribute("id"), el.getAttribute("name"), el.getAttribute("aria-label"), el.getAttribute("placeholder")].join(" ")
+    ) || !!el.closest("[role=search]");
   const textInputCount = inputs.filter(
-    (el) => el.tagName !== "INPUT" || !["hidden", "submit", "button", "checkbox", "radio"].includes((el as HTMLInputElement).type)
+    (el) =>
+      (el.tagName !== "INPUT" ||
+        !["hidden", "submit", "button", "checkbox", "radio", "password", "search", "file"].includes(
+          (el as HTMLInputElement).type
+        )) &&
+      !isSearchBox(el)
   ).length;
   const hasFileUpload = inputs.some((el) => el.tagName === "INPUT" && (el as HTMLInputElement).type === "file");
+  const hasPassword = inputs.some((el) => el.tagName === "INPUT" && (el as HTMLInputElement).type === "password");
 
   const labelText = inputs
     .map((el) => {
@@ -126,7 +145,34 @@ function collectFormSignal(doc: Document): { fieldHits: number; textInputCount: 
     })
     .join(" ");
 
-  return { fieldHits: scoreFieldKeywords(labelText), textInputCount, hasFileUpload };
+  return { fieldHits: scoreFieldKeywords(labelText), textInputCount, hasFileUpload, hasPassword };
+}
+
+/** Iframes whose src is a known ATS application form — a company careers
+ *  page embedding Greenhouse (found live on careers.airbnb.com). */
+export function embeddedAtsFrames(doc: Document): string[] {
+  return Array.from(doc.querySelectorAll("iframe[src]"))
+    .map((f) => f.getAttribute("src") ?? "")
+    .filter((src) => {
+      try {
+        const host = new URL(src, doc.baseURI || "https://invalid.example").hostname;
+        return host !== "linkedin.com" && !host.endsWith(".linkedin.com") && hostMatches(host);
+      } catch {
+        return false;
+      }
+    });
+}
+
+/** Actual application-form evidence on the page. Found live: the floating
+ *  button showed on a SmartRecruiters "Verification Required" captcha page
+ *  and on Workday/iCIMS job-description pages with no form at all, because a
+ *  known ATS hostname alone used to be enough. A sign-in wall (password
+ *  field, no application fields) isn't an application form either. */
+function hasApplicationForm(signal: ReturnType<typeof collectFormSignal>, embedded: number): boolean {
+  if (embedded > 0) return true;
+  const { fieldHits, textInputCount, hasFileUpload, hasPassword } = signal;
+  if (hasPassword && fieldHits === 0 && !hasFileUpload) return false;
+  return hasFileUpload || fieldHits > 0 || textInputCount >= 3;
 }
 
 /**
@@ -148,10 +194,32 @@ export function detectJobApplication(
     return { isJobApplication: false, confidence: 0, signals: ["own-app-host"], hasFileUpload: false };
   }
 
+  // On an ATS host itself, a same-host iframe is usually just the job
+  // description (iCIMS renders its job pages in one); only count it when the
+  // frame URL looks like an application step.
+  const embedded = embeddedAtsFrames(doc).filter((src) => {
+    if (!hostMatches(hostname)) return true;
+    try {
+      const u = new URL(src, doc.baseURI || "https://invalid.example");
+      return u.hostname !== hostname || /apply|application|candidate|job_app/i.test(u.pathname);
+    } catch {
+      return false;
+    }
+  }).length;
+
   if (hostMatches(hostname)) {
     signals.push(`known-ats:${hostname}`);
-    const { hasFileUpload } = collectFormSignal(doc);
-    return { isJobApplication: true, confidence: 0.95, signals, hasFileUpload };
+    const signal = collectFormSignal(doc);
+    if (!hasApplicationForm(signal, embedded)) {
+      signals.push("no-application-form");
+      return { isJobApplication: false, confidence: 0.3, signals, hasFileUpload: signal.hasFileUpload };
+    }
+    return { isJobApplication: true, confidence: 0.95, signals, hasFileUpload: signal.hasFileUpload };
+  }
+
+  if (embedded > 0) {
+    signals.push(`embedded-ats-iframe:${embedded}`);
+    return { isJobApplication: true, confidence: 0.9, signals, hasFileUpload: false };
   }
 
   let score = 0;
@@ -175,7 +243,8 @@ export function detectJobApplication(
     signals.push(`page-text-keywords:${textHits}`);
   }
 
-  const { fieldHits, textInputCount, hasFileUpload } = collectFormSignal(doc);
+  const formSignal = collectFormSignal(doc);
+  const { fieldHits, textInputCount, hasFileUpload } = formSignal;
   if (fieldHits > 0) {
     score += fieldHits * 1.5;
     signals.push(`field-keywords:${fieldHits}`);
@@ -200,7 +269,7 @@ export function detectJobApplication(
   // Require actual form-field evidence too: text signals alone are never
   // sufficient, only a multiplier on top of a page that has a plausible
   // application form on it.
-  const hasFormEvidence = fieldHits > 0 || hasFileUpload || textInputCount >= 3;
+  const hasFormEvidence = hasApplicationForm(formSignal, 0);
   const isJobApplication = confidence >= 0.4 && hasFormEvidence;
 
   return { isJobApplication, confidence, signals, hasFileUpload };

@@ -100,6 +100,41 @@ export async function downloadResume(
   }
 }
 
+export type ResumeSummary = { id: string; fileName: string; kind?: string; createdAt?: string };
+
+/** The signed-in user's resumes, newest first (GET /api/resume). */
+export async function listResumes(getToken: TokenGetter): Promise<ResumeSummary[]> {
+  const res = await authedFetch(getToken, "/api/resume");
+  if (!res.ok) throw new Error(`Couldn't list your resumes (${res.status})`);
+  const body = await res.json().catch(() => ({}));
+  return Array.isArray(body.resumes) ? body.resumes : [];
+}
+
+const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
+
+/** A resume's bytes as base64, for attaching to an application form's file
+ *  input (chrome.scripting args must be JSON-serializable). */
+export async function fetchResumeFile(
+  getToken: TokenGetter,
+  resume: ResumeSummary
+): Promise<{ name: string; type: string; base64: string }> {
+  const res = await authedFetch(getToken, `/api/resume/${encodeURIComponent(resume.id)}/download`);
+  if (!res.ok) throw new Error(`Couldn't download the resume (${res.status})`);
+  const blob = await res.blob();
+  if (blob.size === 0 || blob.size > MAX_ATTACH_BYTES) throw new Error("Resume file is empty or too large to attach");
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  // Keep the real extension (an uploaded original may be .docx); only strip
+  // characters no file name should carry.
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+  const name = resume.fileName.replace(/[\u0000-\u001f\u007f<>:"/\\|?*]+/g, "-").slice(0, 150).trim() || "resume.pdf";
+  return { name, type: blob.type || "application/pdf", base64: btoa(binary) };
+}
+
 /** Tier 3 of the autofill engine — for fields the heuristic + adapter
  *  tiers (autofill-map.ts, entirely client-side) didn't recognize, asks
  *  the backend to match them against a fixed set of known profile

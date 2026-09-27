@@ -10,8 +10,15 @@ export const DetectedFieldSchema = z.object({
   name: z.string().optional(),
   id: z.string().optional(),
   placeholder: z.string().optional(),
-  type: z.string(), // input type / "select" / "textarea" / "file"
+  type: z.string(), // input type / "select" / "textarea" / "file" / "yesno" (button-group Yes/No question)
   options: z.array(z.string()).optional(), // for select/radio/checkbox groups
+  // For a radio/checkbox (or a Yes/No button group), the group's question
+  // ("Will you require visa sponsorship?") — `label` is then the option's
+  // own text ("Yes"). Without it every option of every group reads "Yes"/"No".
+  question: z.string().optional(),
+  // Which frame of the tab the field lives in (0 = top document). Set by
+  // the side panel when it merges fields from an embedded ATS iframe.
+  frameId: z.number().int().optional(),
 });
 
 /** Keys from Profile (dot-path) or a literal freeform question. */

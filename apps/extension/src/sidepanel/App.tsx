@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { DetectedField, Profile } from "@job-jet/shared";
 import type { ExtensionMessage } from "../lib/messages";
-import { fetchProfile, tailorResume, downloadResume, upsertApplication, mapFieldsWithLLM } from "../lib/api";
-import { runAutofillMapping, matches, NEVER_FILL } from "../lib/autofill-map";
-import { fillFieldsInMainWorld } from "../lib/main-world-fill";
+import {
+  fetchProfile,
+  tailorResume,
+  downloadResume,
+  upsertApplication,
+  mapFieldsWithLLM,
+  listResumes,
+  fetchResumeFile,
+} from "../lib/api";
+import { runAutofillMapping, unresolvedFields, toLlmField } from "../lib/autofill-map";
+import { fillFieldsInMainWorld, type FillFile } from "../lib/main-world-fill";
+import { groupByFrame, selectTargetFrames } from "../lib/frames";
+import { resumeInputsByFrame } from "../lib/resume-attach";
+import { locationAliases } from "../lib/location";
 import { matchSkills } from "../lib/skill-match";
 import logoUrl from "../assets/logo-mark-small.svg";
 import { API_BASE_URL } from "../lib/config";
@@ -29,21 +40,72 @@ async function getActiveTab(): Promise<{ id?: number; hostname?: string; url?: s
   return { id: tab?.id, hostname, url: tab?.url };
 }
 
-async function sendToContentScript<T = unknown>(message: ExtensionMessage): Promise<T> {
+async function sendToFrame<T = unknown>(tabId: number, frameId: number, message: ExtensionMessage): Promise<T> {
+  // Always an explicit frameId. Without one, Chrome broadcasts to EVERY
+  // frame with a content-script instance and the first responder wins —
+  // found live against a real Greenhouse posting with reCAPTCHA + Places
+  // iframes as the cause of "0 fields detected". (Those frames are inert
+  // now anyway; see shouldActivateInFrame.)
+  return chrome.tabs.sendMessage(tabId, message, { frameId });
+}
+
+/** The frames worth talking to: the top document, plus any embedded frame
+ *  whose own URL is a known ATS (a careers page embedding Greenhouse). The
+ *  URL is read by the extension itself (isolated world), not reported by
+ *  the page. */
+async function targetFrames(tabId: number): Promise<number[]> {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => location.href,
+    });
+    return selectTargetFrames(results.map((r) => ({ frameId: r.frameId, url: r.result as string | undefined })));
+  } catch {
+    return [0];
+  }
+}
+
+/** Fields from every target frame, each tagged with its frameId. */
+async function requestFormFields(): Promise<DetectedField[]> {
   const { id: tabId } = await getActiveTab();
   if (tabId == null) throw new Error("No active tab");
-  // frameId: 0 = the top-level document only. Without this, Chrome
-  // broadcasts to EVERY frame the content script is injected into
-  // (manifest has all_frames: true) — including third-party iframes like
-  // reCAPTCHA or a Maps/Places embed, which real ATS forms often carry.
-  // Those iframes have their own content-script instance too, and if
-  // THEIRS responds first (a tiny iframe document parses and responds
-  // faster than the real page), chrome.tabs.sendMessage's promise
-  // resolves with the iframe's empty result instead of the real page's —
-  // found live, against a real Greenhouse posting with a reCAPTCHA +
-  // Places-autocomplete iframe, as the actual cause of "0 fields
-  // detected" despite the real form clearly having fields.
-  return chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
+  const frames = await targetFrames(tabId);
+  const perFrame = await Promise.all(
+    frames.map((frameId) =>
+      sendToFrame<{ payload: { fields: DetectedField[] } }>(tabId, frameId, { type: "REQUEST_FORM_FIELDS" })
+        .then((res) => res.payload.fields.map((f) => ({ ...f, frameId })))
+        .catch((err) => {
+          if (frameId === 0) throw err;
+          return [] as DetectedField[];
+        })
+    )
+  );
+  return perFrame.flat();
+}
+
+/** The job description from the top document, falling back to an embedded
+ *  ATS frame when the top page has none. */
+async function requestJobDescription(): Promise<{ text: string; title?: string }> {
+  const { id: tabId } = await getActiveTab();
+  if (tabId == null) throw new Error("No active tab");
+  const frames = await targetFrames(tabId);
+  let best: { text: string; title?: string } = { text: "" };
+  for (const frameId of frames) {
+    try {
+      const res = await sendToFrame<{ payload: { text: string; title?: string } }>(tabId, frameId, {
+        type: "EXTRACT_JOB_DESCRIPTION",
+      });
+      if (res.payload.text && res.payload.text.length > best.text.length / 2) {
+        best = { text: res.payload.text, title: best.title ?? res.payload.title };
+        if (frameId === 0 && res.payload.text.length > 400) break;
+      } else if (!best.title && res.payload.title) {
+        best = { ...best, title: res.payload.title };
+      }
+    } catch (err) {
+      if (frameId === 0 && frames.length === 1) throw err;
+    }
+  }
+  return best;
 }
 
 export function App() {
@@ -69,6 +131,10 @@ export function App() {
   const [autoContinue, setAutoContinue] = useState(false);
 
   const profileRef = useRef<Profile | null>(null);
+  // The resume tailored in this panel for a given page, preferred over the
+  // uploaded original when attaching to that same page's form.
+  const tailoredRef = useRef<{ url: string; id: string; fileName: string } | null>(null);
+  const resumeFileRef = useRef<{ id: string; file: FillFile } | null>(null);
   const knownSelectorsRef = useRef<Set<string>>(new Set());
   const fillingRef = useRef(false);
   const lastHostnameRef = useRef<string | undefined>(undefined);
@@ -92,11 +158,9 @@ export function App() {
       .catch(() => setPageHost(undefined));
     setLastFill(null);
     setJdExpanded(false);
-    const fetchFields = sendToContentScript<{ type: string; payload: { fields: DetectedField[] } }>({
-      type: "REQUEST_FORM_FIELDS",
-    })
-      .then((res) => {
-        setFields(res.payload.fields);
+    const fetchFields = requestFormFields()
+      .then((found) => {
+        setFields(found);
       })
       .catch((err) => {
         // Was previously silent — surfaced now because a swallowed error
@@ -110,12 +174,10 @@ export function App() {
         setFields([]);
       });
 
-    const fetchJd = sendToContentScript<{ type: string; payload: { text: string; title?: string } }>({
-      type: "EXTRACT_JOB_DESCRIPTION",
-    })
+    const fetchJd = requestJobDescription()
       .then((res) => {
-        setJobDescription(res.payload.text);
-        setJobTitle(res.payload.title);
+        setJobDescription(res.text);
+        setJobTitle(res.title);
       })
       .catch((err) => {
         console.error("[job-jet] EXTRACT_JOB_DESCRIPTION failed:", err);
@@ -208,6 +270,27 @@ export function App() {
     return () => chrome.tabs.onUpdated.removeListener(handleTabUpdate);
   }, []);
 
+  /** The stored resume to attach: the one tailored for this page in this
+   *  session, else the most recently uploaded original. Cached per id. */
+  async function resumeToAttach(pageUrl: string | undefined): Promise<FillFile | null> {
+    try {
+      const tailored = tailoredRef.current && tailoredRef.current.url === pageUrl ? tailoredRef.current : null;
+      let pick: { id: string; fileName: string } | undefined = tailored ?? undefined;
+      if (!pick) {
+        const resumes = await listResumes(getToken);
+        pick = resumes.find((r) => r.kind === "uploaded_original") ?? resumes[0];
+      }
+      if (!pick) return null;
+      if (resumeFileRef.current?.id === pick.id) return resumeFileRef.current.file;
+      const file = await fetchResumeFile(getToken, pick);
+      resumeFileRef.current = { id: pick.id, file };
+      return file;
+    } catch (err) {
+      console.error("[job-jet] resume attach skipped:", err);
+      return null;
+    }
+  }
+
   /** Maps + fills `fieldsToFill` and reports the result. Shared by the
    *  manual click and the auto-continue poll below.
    *
@@ -228,37 +311,81 @@ export function App() {
    *  the allow-list's current contents, not an explicit guarantee. This
    *  makes the exclusion hold regardless of what the allow-list contains
    *  later, and saves a wasted round of tokens asking about fields
-   *  tier 1 already decided are never appropriate to guess-fill. */
-  async function fillFields(fieldsToFill: DetectedField[], profile: Profile, hostname: string, auto: boolean) {
+   *  tier 1 already decided are never appropriate to guess-fill (see
+   *  unresolvedFields, which also drops the other options of a radio group
+   *  that already got its answer).
+   *
+   *  Fields can come from several frames (an embedded ATS iframe); values
+   *  are grouped by frame and each frame is filled with its own
+   *  main-world injection. If the form has a resume input, the stored
+   *  resume is attached too (see resumeToAttach). */
+  async function fillFields(
+    fieldsToFill: DetectedField[],
+    profile: Profile,
+    hostname: string,
+    auto: boolean,
+    pageUrl?: string
+  ) {
     const mapped = runAutofillMapping(fieldsToFill, profile, hostname);
 
-    const claimed = new Set(mapped.map((m) => m.selector));
-    const unresolved = fieldsToFill.filter(
-      (f) => !claimed.has(f.selector) && f.type !== "file" && !matches(f, NEVER_FILL)
-    );
-    const llmMapped = unresolved.length > 0 ? await mapFieldsWithLLM(getToken, hostname, unresolved) : [];
+    const unresolved = unresolvedFields(fieldsToFill, mapped);
+    const llmMapped =
+      unresolved.length > 0 ? await mapFieldsWithLLM(getToken, hostname, unresolved.map(toLlmField)) : [];
+
+    const resumeInputs = resumeInputsByFrame(fieldsToFill);
+    const resumeFile = resumeInputs.length > 0 ? await resumeToAttach(pageUrl) : null;
 
     const allMapped = [...mapped, ...llmMapped];
-    if (allMapped.length === 0) {
+    if (allMapped.length === 0 && !resumeFile) {
       if (!auto) setStatus("Didn't recognize any fields we could fill on this page.", "warning");
       return;
     }
-    const values = Object.fromEntries(allMapped.map((m) => [m.selector, m.value]));
     const { id: tabId } = await getActiveTab();
     if (tabId == null) throw new Error("No active tab");
+
+    const frameOf = new Map(fieldsToFill.map((f) => [f.selector, f.frameId ?? 0]));
+    const byFrame = groupByFrame(allMapped, frameOf);
+    if (resumeFile) {
+      for (const input of resumeInputs) if (!byFrame.has(input.frameId ?? 0)) byFrame.set(input.frameId ?? 0, []);
+    }
+    const aliases = locationAliases();
+    const result = { filled: 0, total: 0, attached: 0 };
     // Main-world injection, not a content-script message — see
     // main-world-fill.ts for why: on a real React-controlled form,
     // isolated-world event dispatch silently doesn't stick.
-    const result = await fillFieldsInMainWorld(tabId, values);
-    setLastFill((prev) => (auto && prev ? { filled: prev.filled + result.filled, total: prev.total + result.total } : result));
+    for (const [frameId, frameMapped] of byFrame) {
+      const files: Record<string, FillFile> = {};
+      if (resumeFile) {
+        const input = resumeInputs.find((f) => (f.frameId ?? 0) === frameId);
+        if (input) files[input.selector] = resumeFile;
+      }
+      const r = await fillFieldsInMainWorld(
+        tabId,
+        {
+          values: Object.fromEntries(frameMapped.map((m) => [m.selector, m.value])),
+          aliases,
+          files,
+          locationHint: profile.location ?? undefined,
+        },
+        frameId
+      );
+      result.filled += r.filled;
+      result.total += r.total;
+      result.attached += r.attached;
+    }
+    setLastFill((prev) =>
+      auto && prev ? { filled: prev.filled + result.filled, total: prev.total + result.total } : result
+    );
     const smartMatchNote = llmMapped.length > 0 ? ` (${llmMapped.length} via smart match)` : "";
+    const resumeNote = result.attached > 0 ? " Attached your resume." : "";
     const prefix = auto
       ? `Auto-filled ${result.filled} more field${result.filled === 1 ? "" : "s"} on this step${smartMatchNote}`
       : `Filled ${result.filled} of ${result.total} fields${smartMatchNote}`;
-    setStatus(
-      `${prefix}. File uploads, demographic and open-ended questions still need you — review before submitting.`,
-      "success"
-    );
+    const remaining =
+      result.attached > 0
+        ? "Demographic and open-ended questions still need you"
+        : "File uploads, demographic and open-ended questions still need you";
+    setStatus(`${prefix}.${resumeNote} ${remaining} — review before submitting.`, "success");
   }
 
   async function handleAutofill() {
@@ -270,9 +397,9 @@ export function App() {
       // back. The scan is fast enough that this effectively hides its
       // latency entirely behind the profile fetch instead of adding its
       // own sequential chunk on top.
-      const [profile, res, { hostname, url }] = await Promise.all([
+      const [profile, currentFields, { hostname, url }] = await Promise.all([
         fetchProfile(getToken),
-        sendToContentScript<{ payload: { fields: DetectedField[] } }>({ type: "REQUEST_FORM_FIELDS" }),
+        requestFormFields(),
         getActiveTab(),
       ]);
       if (!profile) {
@@ -282,11 +409,10 @@ export function App() {
       profileRef.current = profile;
       setSkills(profile.skills ?? []);
 
-      const currentFields = res.payload.fields;
       setFields(currentFields);
       knownSelectorsRef.current = new Set(currentFields.map((f) => f.selector));
 
-      await fillFields(currentFields, profile, hostname ?? "", false);
+      await fillFields(currentFields, profile, hostname ?? "", false, url);
       setAutoContinue(true);
 
       // Best-effort tracker entry — autofilling is a clear enough signal
@@ -313,16 +439,12 @@ export function App() {
       if (fillingRef.current || !profileRef.current) return;
       fillingRef.current = true;
       try {
-        const [res, { hostname }] = await Promise.all([
-          sendToContentScript<{ payload: { fields: DetectedField[] } }>({ type: "REQUEST_FORM_FIELDS" }),
-          getActiveTab(),
-        ]);
-        const currentFields = res.payload.fields;
+        const [currentFields, { hostname, url }] = await Promise.all([requestFormFields(), getActiveTab()]);
         setFields(currentFields);
         const newFields = currentFields.filter((f) => !knownSelectorsRef.current.has(f.selector));
         knownSelectorsRef.current = new Set(currentFields.map((f) => f.selector));
         if (newFields.length > 0) {
-          await fillFields(newFields, profileRef.current, hostname ?? "", true);
+          await fillFields(newFields, profileRef.current, hostname ?? "", true, url);
         }
       } catch {
         // Page navigated away, content script not there this tick, etc. —
@@ -348,11 +470,13 @@ export function App() {
     setStatus("Tailoring your resume to this job — this can take a few seconds…", "loading");
     try {
       const resume = await tailorResume(getToken, jobDescription);
+      const { url: pageUrl } = await getActiveTab();
+      if (pageUrl) tailoredRef.current = { url: pageUrl, id: resume.id, fileName: resume.fileName };
       setStatus(`Downloading "${resume.fileName}"…`, "loading");
       await downloadResume(getToken, resume.id, resume.fileName);
       setStatus(
-        `Saved "${resume.fileName}" to Downloads. Attach it in the form's resume field ` +
-          `(browsers don't let extensions fill file inputs).`,
+        `Saved "${resume.fileName}" to Downloads. Autofill attaches it to this form's resume field ` +
+          `when it can — otherwise attach it yourself.`,
         "success"
       );
 
